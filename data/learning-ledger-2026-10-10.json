@@ -1,0 +1,280 @@
+{
+  "app": "learning-ledger",
+  "schema": 1,
+  "exportedAt": "2026-10-10T20:05:00Z",
+  "tracks": [
+    {
+      "id": "webapp",
+      "createdAt": 1791561600000,
+      "doneWhen": "The app is live on my own domain over HTTPS, with frontend, backend, database and user accounts working, and at least one other person has used it.",
+      "outcome": "Build a web app with Claude Code, published and hosted on my own domain, with the full tech stack it needs",
+      "startDate": "2026-10-09",
+      "targetDate": "2027-01-01",
+      "title": "Web App with Claude Code",
+      "why": "Learning is important to me and to others. I want this web app to be useful for others too, and being able to create my own web app is an important milestone toward my learning goal."
+    }
+  ],
+  "topics": [
+    {
+      "id": "claude-code",
+      "createdAt": 1791563510000,
+      "name": "Claude Code Tutorial",
+      "trackId": "webapp"
+    },
+    {
+      "id": "planning",
+      "createdAt": 1791563500000,
+      "name": "Planning & app idea",
+      "trackId": "webapp"
+    }
+  ],
+  "milestones": [
+    {
+      "id": "m1",
+      "doneAt": "2026-10-10",
+      "due": "2026-10-18",
+      "nextStep": "",
+      "order": 1,
+      "status": "done",
+      "title": "Set up the toolkit: Claude Code, Node.js, Git, GitHub and a code editor",
+      "trackId": "webapp"
+    },
+    {
+      "id": "m2",
+      "doneAt": "",
+      "due": "2026-10-31",
+      "nextStep": "Move the app to local static page",
+      "order": 2,
+      "status": "doing",
+      "title": "Build and run a first static page locally with Claude Code",
+      "trackId": "webapp"
+    },
+    {
+      "id": "m3",
+      "doneAt": "",
+      "due": "2026-11-07",
+      "order": 3,
+      "status": "todo",
+      "title": "Define the app: the problem, who it's for, and the v1 feature list",
+      "trackId": "webapp"
+    },
+    {
+      "id": "m4",
+      "doneAt": "",
+      "due": "2026-11-21",
+      "order": 4,
+      "status": "todo",
+      "title": "Build the frontend with a framework",
+      "trackId": "webapp"
+    },
+    {
+      "id": "m5",
+      "doneAt": "",
+      "due": "2026-12-05",
+      "order": 5,
+      "status": "todo",
+      "title": "Add a backend and database so data is saved",
+      "trackId": "webapp"
+    },
+    {
+      "id": "m6",
+      "doneAt": "",
+      "due": "2026-12-12",
+      "order": 6,
+      "status": "todo",
+      "title": "Add user accounts (sign up, sign in)",
+      "trackId": "webapp"
+    },
+    {
+      "id": "m7",
+      "doneAt": "",
+      "due": "2026-12-19",
+      "order": 7,
+      "status": "todo",
+      "title": "Buy a domain and deploy the app on it with HTTPS",
+      "trackId": "webapp"
+    },
+    {
+      "id": "m8",
+      "doneAt": "",
+      "due": "2027-01-01",
+      "order": 8,
+      "status": "todo",
+      "title": "Ship v1 and get real people using it",
+      "trackId": "webapp"
+    }
+  ],
+  "entries": [
+    {
+      "id": "4ifocv8y1d8t890ss5v9",
+      "createdAt": 1791645633932,
+      "date": "2026-10-10",
+      "milestoneId": "",
+      "text": "Learnt command in VS Code terminal:\n? for shortcuts\n! for bash\n/ for commands\n@ for referencing code file\n& for background job\n\n/terminal-setup - install shift + enter key binding\n!npm run dev or run app to start the app\n/tasks to see the background task\n/init to initialize claude.md -> project notes and architecture\n!git add . && git commit -m \"...\" or commit to commit the code\n/context --> to review context usage and etc.\n/compact --> clear conversation history to reduce context usage\n/clear --> to clear further when switching between task\n/usage --> to show claude usage",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "insight",
+      "url": ""
+    },
+    {
+      "id": "67k6hxv4j0h7vye6ls5i",
+      "answer": "see learning notes.\nCreate.md file. Prepare the code, libraries, data and services. Export it. Convert it in claude code using the prompt. Import data. Put it in GitHub.",
+      "createdAt": 1791613757997,
+      "date": "2026-10-10",
+      "milestoneId": "",
+      "resolved": true,
+      "text": "How to move app from claude.ai to local static page?",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "question",
+      "url": ""
+    },
+    {
+      "id": "cgbfxqmz6elv66piwwv0",
+      "createdAt": 1791605899670,
+      "date": "2026-10-10",
+      "milestoneId": "m1",
+      "text": "Claude code is installed through terminal. Node.js, Git and Git Hub is installed. Visual Studio is installed as code editor.",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "build",
+      "url": ""
+    },
+    {
+      "id": "e1",
+      "createdAt": 1791563400000,
+      "date": "2026-10-09",
+      "text": "Broke down why learning gets lost: no single home per topic. Fix = one track holding goal, milestones, a log (source / insight / question / build / milestone) and a next step. Built this Learning Ledger as the first version.",
+      "topicId": "planning",
+      "trackId": "webapp",
+      "type": "insight",
+      "url": ""
+    },
+    {
+      "id": "e2",
+      "answersId": "",
+      "createdAt": 1791563460000,
+      "date": "2026-10-09",
+      "milestoneId": "",
+      "resolved": true,
+      "text": "Should the web app I ship be a multi-user version of this Learning Ledger, so others can use it too?",
+      "topicId": "planning",
+      "trackId": "webapp",
+      "type": "question",
+      "url": ""
+    },
+    {
+      "id": "fuj52wz6stffqdh0v52d",
+      "createdAt": 1791657988725,
+      "date": "2026-10-10",
+      "milestoneId": "",
+      "text": "Plan mode\nCycle by pressing Shift+Tab\nMention the planned changes / new feature\nClaude will read and analyze the architecture and drafted an implementation plan without changing any code until the plan is approved",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "insight",
+      "url": ""
+    },
+    {
+      "id": "hfocs16rqzw53mu1r8rn",
+      "answer": "Sharing chat link is static. To create a dynamic one, ask claude to put the key points from this chat into a document (artifact), and ask claude to update it as we go. Share and copy the link from the artifact.",
+      "createdAt": 1791644578436,
+      "date": "2026-10-10",
+      "milestoneId": "",
+      "resolved": true,
+      "text": "How to create link to Claude chat?",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "question",
+      "url": ""
+    },
+    {
+      "id": "k2rthn1iy0knl4wiundr",
+      "createdAt": 1791613289473,
+      "date": "2026-10-10",
+      "milestoneId": "",
+      "text": "VS Code\nRun claude in project folder\nRun app or !npm run dev\n/tasks to check\nkill app to stop",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "insight",
+      "url": ""
+    },
+    {
+      "id": "ms-m1",
+      "createdAt": 1791606960826,
+      "date": "2026-10-10",
+      "milestoneId": "m1",
+      "text": "Reached milestone: Set up the toolkit: Claude Code, Node.js, Git, GitHub and a code editor",
+      "topicId": "",
+      "trackId": "webapp",
+      "type": "milestone",
+      "url": ""
+    },
+    {
+      "id": "n5gydtcybug7evzfvkwa",
+      "createdAt": 1791613425646,
+      "date": "2026-10-09",
+      "milestoneId": "",
+      "text": "Learning Notes",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "source",
+      "url": "https://claude.ai/artifact/J2412vzAE9u5MQy7voYpL9#2945f15f-46e4"
+    },
+    {
+      "id": "sa00q8y1evph3413g86t",
+      "createdAt": 1791659657839,
+      "date": "2026-10-10",
+      "milestoneId": "",
+      "text": "MCP. Model Context Protocol",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "insight",
+      "url": ""
+    },
+    {
+      "id": "t0pj5qe2970jbbfd0lgr",
+      "createdAt": 1791646554957,
+      "date": "2026-10-09",
+      "milestoneId": "",
+      "text": "App Design Notes",
+      "topicId": "planning",
+      "trackId": "webapp",
+      "type": "source",
+      "url": "https://claude.ai/artifact/Hu2TBvmwtAczk18CkZjZto#f0f15005-000f"
+    },
+    {
+      "id": "ttjnp56yyjn2zr2daucm",
+      "answer": "Yes. Check Learning Notes.",
+      "createdAt": 1791614527544,
+      "date": "2026-10-10",
+      "milestoneId": "",
+      "resolved": true,
+      "text": "Git Hub\nHow? Also work for local static page? Works together with VS?",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "question",
+      "url": ""
+    },
+    {
+      "id": "tvznklxsymgur48xxx0r",
+      "createdAt": 1791604613884,
+      "date": "2026-10-09",
+      "text": "Metics Media. Claude Code Tutorial by Mosh Hamdani",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "source",
+      "url": "https://www.youtube.com/watch?v=IuyVVtr1uhY"
+    },
+    {
+      "id": "wymnnkojy1h2lofqjoin",
+      "createdAt": 1791657848587,
+      "date": "2026-10-10",
+      "milestoneId": "",
+      "text": "Exploring codebase:\nWhat does this project do?\nWhat tech stack it uses?\nHow's the authentication implemented?\nExplain the folder structure\nExplain a piece of code",
+      "topicId": "claude-code",
+      "trackId": "webapp",
+      "type": "insight",
+      "url": ""
+    }
+  ]
+}

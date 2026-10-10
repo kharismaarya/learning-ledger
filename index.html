@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Learning Ledger</title>
+<!-- Local edition: no network needed. Data is kept in this browser (localStorage key "learning-ledger"). -->
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+[hidden]{display:none!important}
+body{margin:0}
+img{max-width:100%}
+.io{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.io .state{font-size:12px;color:var(--muted)}
+.io .state.warn{color:var(--warn);font-weight:600}
+.banner .row{margin-top:8px}
+/* Layout: a resume column (goal, next step, milestones) beside a working column (quick add, log rail). Stacks on phones, resume first. */
+:root{
+  --bg:#F3F4F1; --surface:#FFFFFF; --sunk:#E9EBE6; --line:#D6D9D2;
+  --ink:#18201D; --muted:#5E6762; --faint:#8B938E;
+  --accent:#2747C9; --accent-soft:#E3E8FB; --next:#B45F06; --next-soft:#FBEEDD;
+  --t-source:#2F6FB5; --t-insight:#7A4BB8; --t-question:#B7791F; --t-build:#2E8B57; --t-milestone:#18201D;
+  --good:#2E8B57; --warn:#B7791F; --bad:#B4362D;
+  --f-display:"Familjen Grotesk","Helvetica Neue",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121614; --surface:#1A1F1C; --sunk:#222825; --line:#323A36;
+  --ink:#E8ECE9; --muted:#A3ACA7; --faint:#77807B;
+  --accent:#8EA4FF; --accent-soft:#232C4D; --next:#F0A04B; --next-soft:#3A2A17;
+  --t-source:#6FA8E8; --t-insight:#B596F0; --t-question:#E3AE55; --t-build:#5FC08A; --t-milestone:#E8ECE9;
+  --good:#5FC08A; --warn:#E3AE55; --bad:#EE7A70; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#121614; --surface:#1A1F1C; --sunk:#222825; --line:#323A36;
+  --ink:#E8ECE9; --muted:#A3ACA7; --faint:#77807B;
+  --accent:#8EA4FF; --accent-soft:#232C4D; --next:#F0A04B; --next-soft:#3A2A17;
+  --t-source:#6FA8E8; --t-insight:#B596F0; --t-question:#E3AE55; --t-build:#5FC08A; --t-milestone:#E8ECE9;
+  --good:#5FC08A; --warn:#E3AE55; --bad:#EE7A70; color-scheme:dark;}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;padding-inline:16px;padding-block:20px 48px}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+button,input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.label{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* top bar */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;justify-content:space-between}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand h1{font-size:20px}
+.brand span{color:var(--faint);font-size:13px}
+.tracks{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip.ghost{background:transparent;border-style:dashed;color:var(--muted)}
+
+/* grid */
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:20px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:20px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.panel-head h2{font-size:16px}
+
+/* goal */
+.goal h2.outcome{font-size:clamp(20px,2.6vw,26px);line-height:1.2}
+.goal .why{color:var(--muted);max-width:60ch}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.fact{background:var(--surface);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.fact b{font-family:var(--f-display);font-size:20px;font-weight:600}
+.fact small{color:var(--muted);font-size:12px}
+.pace{display:flex;flex-direction:column;gap:6px}
+.bar{position:relative;height:8px;background:var(--sunk);border-radius:99px;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:99px}
+.bar em{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--next)}
+.pace-legend{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;border:1px solid currentColor}
+.pill.good{color:var(--good)} .pill.warn{color:var(--warn)} .pill.bad{color:var(--bad)}
+
+/* next step */
+.next{background:var(--next-soft);border:1px solid color-mix(in srgb,var(--next) 35%,transparent);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.next .label{color:var(--next)}
+.next input{width:100%;background:transparent;border:0;border-bottom:1px dashed color-mix(in srgb,var(--next) 50%,transparent);padding:4px 0;font-size:16px;font-weight:500}
+.next input:focus{outline:none;border-bottom-style:solid}
+.lastseen{font-size:13px;color:var(--muted)}
+.answer{background:color-mix(in srgb,var(--good) 9%,transparent);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:2px;margin-top:2px}
+.answer .label{color:var(--good);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.answer .txt{white-space:pre-wrap;overflow-wrap:anywhere}
+.link-btn{align-self:flex-start;border:0;background:transparent;padding:0;color:var(--accent);font:inherit;font-size:13px;cursor:pointer}
+.link-btn:hover{text-decoration:underline}
+.ans-form{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:4px}
+.qlist li{flex-wrap:wrap}
+.qlist .ans-form{flex-basis:100%}
+.ach{display:flex;flex-direction:column;gap:6px;padding:10px 0 4px;border-top:1px dashed color-mix(in srgb,var(--next) 35%,transparent)}
+.ach ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ach li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;align-items:baseline;font-size:14px}
+.ach li::before{content:"✓";color:var(--good);font-weight:700}
+.ach .x{overflow-wrap:anywhere}
+.ach .x small{display:block;font-size:12px;color:var(--muted)}
+.ach .more{align-self:flex-start;border:0;background:transparent;padding:0;color:var(--next);font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
+.ach .none{font-size:13px;color:var(--muted)}
+.now-ms{font-family:var(--f-display);font-size:18px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.ms .ns{font-size:13px;color:var(--next);margin-top:2px}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;padding-top:18px}
+.chk input{width:16px;height:16px;accent-color:var(--good)}
+.mtag{font:inherit;font-size:11px;color:var(--ink);border:1px solid var(--line);border-radius:99px;padding:0 8px;max-width:22ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ms .mt-btn{border:0;background:transparent;padding:0;text-align:left;cursor:pointer;color:inherit;font:inherit}
+.ms .mt-btn:hover{text-decoration:underline;text-decoration-color:var(--faint)}
+.ms .mt-btn[aria-pressed="true"]{color:var(--accent);font-weight:600}
+.ms li:has(.mt-btn[aria-pressed="true"]){background:var(--accent-soft);margin-inline:-10px;padding-inline:10px;border-radius:8px}
+.ms .logged{color:var(--accent)}
+.ms-detail{grid-column:1/-1;background:var(--bg);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.ms-detail ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ms-detail li{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:8px;align-items:baseline;padding:0;border:0}
+.ms-detail .t{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--c)}
+.ms-detail .x{overflow-wrap:anywhere}
+
+/* milestones */
+.ms{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ms li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.ms li:first-child{border-top:0}
+.ms .state{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);background:transparent;cursor:pointer;display:grid;place-items:center;font-size:13px;line-height:1}
+.ms li[data-s="doing"] .state{border-color:var(--accent);background:conic-gradient(var(--accent) 0 50%,transparent 50% 100%)}
+.ms li[data-s="done"] .state{border-color:var(--good);background:var(--good);color:var(--surface)}
+.ms li[data-s="done"] .mt{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--faint)}
+.ms .mt{min-width:0;overflow-wrap:anywhere}
+.ms .due{font-size:12px;color:var(--faint)}
+.ms .acts{display:flex;gap:4px}
+.icon-btn{border:0;background:transparent;color:var(--faint);cursor:pointer;padding:4px 6px;border-radius:6px;font-size:12px}
+.icon-btn:hover{background:var(--sunk);color:var(--ink)}
+.icon-btn.danger{color:var(--bad)}
+.ms-add{display:flex;gap:8px;flex-wrap:wrap}
+.ms-add input[type=text]{flex:1 1 180px;min-width:0}
+.ms-add input[type=date]{flex:0 0 auto}
+
+/* forms */
+.field{display:flex;flex-direction:column;gap:4px}
+input[type=text],input[type=url],input[type=date],textarea,input[type=search]{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:64px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:500}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+:root[data-theme="dark"] .btn.primary{color:#0E1330}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.primary{color:#0E1330}}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.row > .field{flex:1 1 160px;min-width:0}
+
+/* quick add */
+.types{display:flex;flex-wrap:wrap;gap:6px}
+.type{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:5px 11px;font-size:13px;cursor:pointer}
+.type .dot{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.type[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb,var(--c) 14%,var(--surface));font-weight:600}
+.hint{font-size:12px;color:var(--faint)}
+
+/* log */
+.filters{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.log-search{order:-1}
+.log{display:flex;flex-direction:column}
+.month{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:14px 0 6px 92px}
+.entry{display:grid;grid-template-columns:72px 20px minmax(0,1fr);gap:0 0;position:relative}
+.entry .d{font-family:var(--f-mono);font-size:12px;color:var(--muted);padding-top:11px;text-align:right;padding-right:12px}
+.entry .rail{position:relative}
+.entry .rail::before{content:"";position:absolute;left:9px;top:0;bottom:0;width:2px;background:var(--line)}
+.entry .rail::after{content:"";position:absolute;left:4px;top:13px;width:12px;height:12px;border-radius:50%;background:var(--surface);border:3px solid var(--c)}
+.entry[data-t="milestone"] .rail::after{border-radius:2px;transform:rotate(45deg);background:var(--c)}
+.entry .body{padding:8px 0 12px 10px;min-width:0;display:flex;flex-direction:column;gap:4px}
+.entry .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.entry .t{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--c)}
+.entry .txt{white-space:pre-wrap;overflow-wrap:anywhere}
+.entry a{color:var(--accent);overflow-wrap:anywhere;font-size:13px}
+.entry .acts{margin-left:auto;display:flex;gap:2px;opacity:.65}
+.entry:hover .acts,.entry:focus-within .acts{opacity:1}
+.resolved{font-size:11px;color:var(--good);font-weight:600}
+.empty{color:var(--muted);padding:18px;border:1px dashed var(--line);border-radius:var(--r);text-align:left;display:flex;flex-direction:column;gap:6px}
+
+.qlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.qlist li{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.qlist li span{min-width:0;overflow-wrap:anywhere}
+
+/* topics */
+.topics{display:flex;flex-direction:column}
+.topic{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:center;border-top:1px solid var(--line);padding:6px 0}
+.topic:first-child{border-top:0}
+.topic-btn{border:0;background:transparent;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0;padding:6px 8px;border-radius:8px}
+.topic-btn:hover{background:var(--sunk)}
+.topic-btn[aria-pressed="true"]{background:var(--accent-soft)}
+.topic-name{font-weight:600;overflow-wrap:anywhere}
+.topic-meta{font-size:12px;color:var(--muted)}
+.topic-detail{grid-column:1/-1;background:var(--bg);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.topic-detail ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.topic-detail a{color:var(--accent);overflow-wrap:anywhere}
+.topic-detail .hint{margin:0}
+.ttag{font:inherit;font-size:11px;color:var(--muted);background:var(--sunk);border-radius:99px;padding:1px 8px;cursor:pointer;border:0}
+.ttag.none{color:var(--bad);cursor:default}
+select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+.group-h{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;padding:16px 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.group-h:first-child{padding-top:4px}
+.group-h h3{font-size:15px}
+.group-h span{font-size:12px;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:5px 10px;font-size:13px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.req{color:var(--bad)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:10}
+.banner{background:var(--accent-soft);border-radius:var(--r);padding:12px 14px;font-size:14px}
+.claude-tip{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+.claude-tip code{font-family:var(--f-mono);font-size:12px;background:var(--sunk);padding:1px 6px;border-radius:4px}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .4s ease}}
+@media (max-width:480px){
+  .facts{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .fact b{font-size:17px}
+  .entry{grid-template-columns:52px 20px minmax(0,1fr)}
+  .entry .d{font-size:11px;padding-right:8px}
+  .month{padding-left:72px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><h1>Learning Ledger</h1><span id="savedState" class="mono"></span></div>
+    <nav class="tracks" id="trackBar" aria-label="Learning tracks"></nav>
+    <div class="io">
+      <span class="state" id="backupState"></span>
+      <button class="btn" type="button" id="exportBtn">Export</button>
+      <button class="btn" type="button" id="importBtn">Import</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel goal" id="goalPanel" aria-label="Goal"></section>
+      <section class="next" id="nextPanel" hidden>
+        <span class="label" id="nowLabel">Now working on</span>
+        <div class="now-ms" id="nowMs"></div>
+        <div class="ach" id="nowAch" hidden></div>
+        <div class="field" id="nextField">
+          <label class="label" for="nextInput">Next step</label>
+          <input type="text" id="nextInput" placeholder="What's the very next thing you'll do for this milestone?">
+        </div>
+        <span class="lastseen" id="lastSeen"></span>
+      </section>
+      <section class="panel" id="msPanel" hidden>
+        <div class="panel-head"><h2>Milestones</h2><span class="label" id="msCount"></span></div>
+        <ul class="ms" id="msList"></ul>
+        <form class="ms-add" id="msForm">
+          <input type="text" id="msTitle" placeholder="Add a milestone (a capability, not a task)" aria-label="New milestone">
+          <input type="date" id="msDue" aria-label="Milestone target date">
+          <button class="btn" type="submit">Add</button>
+        </form>
+      </section>
+      <section class="panel" id="qPanel" hidden>
+        <div class="panel-head"><h2>Open questions</h2><span class="label" id="qCount"></span></div>
+        <ul class="qlist" id="qList"></ul>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel" id="topicPanel" hidden>
+        <div class="panel-head"><h2>Topics</h2><span class="label" id="topicCount"></span></div>
+        <div class="topics" id="topicList"></div>
+        <form class="ms-add" id="topicForm">
+          <input type="text" id="topicName" placeholder="New topic, e.g. HTML & CSS" aria-label="New topic name">
+          <button class="btn" type="submit">Add topic</button>
+        </form>
+      </section>
+
+      <section class="panel" id="addPanel" hidden>
+        <div class="panel-head"><h2>Log something</h2><span class="hint">Takes 5 seconds. Future you will thank you.</span></div>
+        <form id="addForm" style="display:flex;flex-direction:column;gap:12px">
+          <div class="row">
+            <div class="field"><label class="label" for="addTopic">Topic <span class="req">*</span></label><select id="addTopic"></select></div>
+            <div class="field" id="newTopicField" hidden><label class="label" for="addTopicNew">New topic name</label><input type="text" id="addTopicNew" placeholder="e.g. Git & GitHub"></div>
+          </div>
+          <div class="types" id="typePick" role="group" aria-label="Entry type"></div>
+          <div class="row" style="align-items:center" id="addMsRow" hidden>
+            <div class="field"><label class="label" for="addMs">Progress toward milestone <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--faint)">optional</span></label><select id="addMs"></select></div>
+            <label id="addDoneWrap" class="chk" hidden><input type="checkbox" id="addDone"> This completes the milestone</label>
+          </div>
+          <div class="field">
+            <textarea id="addText" placeholder="What did you get from it? One line is enough." aria-label="What you learned or did"></textarea>
+          </div>
+          <div class="row">
+            <div class="field"><input type="url" id="addUrl" placeholder="Link (video, article, chat, repo) — optional" aria-label="Link"></div>
+            <div class="field" style="flex:0 0 auto"><input type="date" id="addDate" aria-label="Date"></div>
+            <button class="btn primary" type="submit" id="addBtn">Add to log</button>
+          </div>
+        </form>
+        <div class="claude-tip">Saved in this browser as you go. Use <code>Export</code> now and then to keep a backup file you can import anywhere.</div>
+      </section>
+
+      <section class="panel" id="logPanel" hidden>
+        <div class="panel-head">
+          <div style="display:flex;align-items:baseline;gap:10px"><h2>Log</h2><span class="label" id="logCount"></span></div>
+          <div class="seg" id="viewSeg" role="group" aria-label="Log view"><button type="button" data-v="time">Timeline</button><button type="button" data-v="topic">By topic</button><button type="button" data-v="milestone">By milestone</button></div>
+        </div>
+        <input type="search" id="logSearch" class="log-search" placeholder="Search the log: text, links or topic names" aria-label="Search the log">
+        <div class="filters" id="filters"></div>
+        <div class="log" id="log"></div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(function(){
+const TYPES=[
+  {k:"source",n:"Source",c:"var(--t-source)"},
+  {k:"insight",n:"Insight",c:"var(--t-insight)"},
+  {k:"question",n:"Question",c:"var(--t-question)"},
+  {k:"build",n:"Build",c:"var(--t-build)"},
+  {k:"milestone",n:"Milestone",c:"var(--t-milestone)"}
+];
+const TMAP=Object.fromEntries(TYPES.map(t=>[t.k,t]));
+const PICK=TYPES.filter(t=>t.k!=="milestone"); /* milestone entries are created by ticking a milestone done */
+const $=id=>document.getElementById(id);
+const S={db:null,canWrite:false,tracks:[],entries:[],ms:[],topics:[],cur:null,type:"insight",typeTouched:false,filter:"all",q:"",editingGoal:false,newTrack:false,confirmDel:null,editMs:null,editTopic:null,topicFilter:null,forceTopic:null,moveEntry:null,view:"time",loaded:{t:false,e:false,m:false,p:false}};
+
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+S.view=["topic","milestone"].includes(store.get("ll.view"))?store.get("ll.view"):"time";
+S.cur=store.get("ll.track");
+
+function today(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function parseD(s){if(!s)return null;const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
+function fmtD(s,opt){const d=parseD(s);return d?d.toLocaleDateString("en-GB",opt||{day:"numeric",month:"short"}):""}
+function daysBetween(a,b){return Math.round((b-a)/86400000)}
+function el(tag,attrs,...kids){const e=document.createElement(tag);if(attrs)for(const[k,v]of Object.entries(attrs)){if(v==null||v===false)continue;if(k==="class")e.className=v;else if(k==="text")e.textContent=v;else if(k.startsWith("on"))e.addEventListener(k.slice(2),v);else if(k==="style")e.setAttribute("style",v);else e.setAttribute(k,v===true?"":v)}for(const k of kids.flat()){if(k==null||k===false)continue;e.append(k.nodeType?k:document.createTextNode(String(k)))}return e}
+let toastT;function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2200)}
+async function write(fn,okMsg){if(!S.db||!S.canWrite){toast("This view is read-only.");return false}try{await fn();if(okMsg)toast(okMsg);return true}catch(e){toast(e&&e.code==="quota_exceeded"?"Browser storage is full. Export a backup, then delete old entries.":"Couldn't save to this browser's storage.");console.error(e);return false}}
+
+const track=()=>S.tracks.find(t=>t.id===S.cur)||null;
+const tEntries=()=>S.entries.filter(e=>e.trackId===S.cur).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.createdAt||0)-(a.createdAt||0));
+const tMs=()=>S.ms.filter(m=>m.trackId===S.cur).sort((a,b)=>(a.order??0)-(b.order??0));
+const tTopics=()=>S.topics.filter(t=>t.trackId===S.cur).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+const topicOf=e=>e.topicId?S.topics.find(t=>t.id===e.topicId&&t.trackId===S.cur)||null:null;
+const plural=(n,w,ws)=>n+" "+(n===1?w:(ws||w+"s"));
+
+/* ---------- track bar ---------- */
+function renderTracks(){
+  const bar=$("trackBar");bar.replaceChildren();
+  S.tracks.slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).forEach(t=>{
+    bar.append(el("button",{class:"chip","aria-pressed":String(t.id===S.cur&&!S.newTrack),onclick:()=>{S.cur=t.id;S.newTrack=false;S.editingGoal=false;S.topicFilter=null;S.msFilter=null;store.set("ll.track",t.id);render()}},t.title||"Untitled"));
+  });
+  if(S.canWrite)bar.append(el("button",{class:"chip ghost","aria-pressed":String(S.newTrack),onclick:()=>{S.newTrack=true;S.editingGoal=true;render()}},"+ New track"));
+}
+
+/* ---------- goal ---------- */
+function goalForm(t){
+  const f=el("form",{style:"display:flex;flex-direction:column;gap:12px"});
+  const fld=(id,lab,val,tag="input",type="text")=>{const inp=tag==="textarea"?el("textarea",{id,rows:2}):el("input",{id,type});inp.value=val||"";return el("div",{class:"field"},el("label",{class:"label",for:id},lab),inp)};
+  f.append(
+    fld("g_title","Track name",t?.title),
+    fld("g_outcome","Outcome — I can…",t?.outcome,"textarea"),
+    fld("g_why","Why it matters",t?.why,"textarea"),
+    fld("g_done","Done when (a testable finish line)",t?.doneWhen,"textarea"),
+    el("div",{class:"row"},fld("g_start","Started",t?.startDate||today(),"input","date"),fld("g_target","Target date",t?.targetDate,"input","date")),
+    el("div",{class:"row"},
+      el("button",{class:"btn primary",type:"submit"},t?"Save goal":"Create track"),
+      el("button",{class:"btn",type:"button",onclick:()=>{S.editingGoal=false;S.newTrack=false;render()}},"Cancel"))
+  );
+  f.addEventListener("submit",async ev=>{ev.preventDefault();
+    const body={title:$("g_title").value.trim()||"Untitled track",outcome:$("g_outcome").value.trim(),why:$("g_why").value.trim(),doneWhen:$("g_done").value.trim(),startDate:$("g_start").value||today(),targetDate:$("g_target").value||""};
+    if(t){if(await write(()=>S.db.doc("tracks/"+t.id).update(body),"Goal saved")){S.editingGoal=false;render()}}
+    else{const ref=S.db.collection("tracks").doc();if(await write(()=>ref.set({...body,nextStep:"",createdAt:Date.now()}),"Track created")){S.cur=ref.id;store.set("ll.track",ref.id);S.newTrack=false;S.editingGoal=false;render()}}
+  });
+  return f;
+}
+function renderGoal(){
+  const p=$("goalPanel");
+  const t=S.newTrack?null:track();
+  const mode=S.editingGoal?"edit:"+(t?t.id:"new"):"view";
+  if(S.editingGoal&&p.dataset.mode===mode)return; /* keep typed input across live updates */
+  p.dataset.mode=mode;p.replaceChildren();
+  if(S.editingGoal&&S.canWrite){p.append(el("div",{class:"panel-head"},el("h2",null,t?"Edit goal":"New learning track")),goalForm(t));return}
+  if(!t){
+    const ready=S.loaded.t;
+    p.append(el("div",{class:"empty"},
+      el("strong",null,ready?"No learning track yet":"Loading your tracks…"),
+      el("span",null,ready?"A track holds one goal, the milestones toward it, and a log of everything you watch, learn, ask, and build.":"Your goals, milestones and log appear here."),
+      ready&&S.canWrite?el("div",{style:"display:flex;gap:8px;flex-wrap:wrap"},el("button",{class:"btn primary",onclick:()=>{S.newTrack=true;S.editingGoal=true;render()}},"Start a track"),el("button",{class:"btn",onclick:()=>$("importFile").click()},"Import a backup")):null));
+    return;
+  }
+  const ms=tMs(),done=ms.filter(m=>m.status==="done").length,pct=ms.length?Math.round(done/ms.length*100):0;
+  const start=parseD(t.startDate),end=parseD(t.targetDate),now=parseD(today());
+  let left=null,timePct=null;
+  if(end){left=daysBetween(now,end);if(start){const tot=Math.max(1,daysBetween(start,end));timePct=Math.min(100,Math.max(0,Math.round(daysBetween(start,now)/tot*100)))}}
+  let pace=null;
+  if(timePct!=null&&ms.length){const gap=pct-timePct;pace=gap>=-5?["good","On pace"]:gap>=-20?["warn","Slightly behind"]:["bad","Behind"]}
+  p.append(
+    el("div",{class:"panel-head"},el("span",{class:"label"},"Goal"),S.canWrite?el("button",{class:"icon-btn",onclick:()=>{S.editingGoal=true;render()}},"Edit"):null),
+    el("h2",{class:"outcome"},t.outcome||t.title),
+    t.why?el("p",{class:"why",style:"margin:0"},t.why):null,
+    t.doneWhen?el("div",{class:"field"},el("span",{class:"label"},"Done when"),el("span",null,t.doneWhen)):null,
+    el("div",{class:"facts"},
+      el("div",{class:"fact"},el("small",null,"Target"),el("b",{class:"mono"},end?fmtD(t.targetDate,{day:"numeric",month:"short",year:"2-digit"}):"—")),
+      el("div",{class:"fact"},el("small",null,left!=null&&left<0?"Days over":"Days left"),el("b",{class:"mono"},left==null?"—":String(Math.abs(left)))),
+      el("div",{class:"fact"},el("small",null,"Milestones"),el("b",{class:"mono"},ms.length?done+"/"+ms.length:"—"))
+    ),
+    ms.length?el("div",{class:"pace"},
+      (()=>{const b=el("div",{class:"bar",role:"img","aria-label":`${pct}% of milestones done, ${timePct??0}% of time used`});const i=el("i");i.style.width=pct+"%";b.append(i);if(timePct!=null){const m=el("em");m.style.left=`calc(${timePct}% - 1px)`;b.append(m)}return b})(),
+      el("div",{class:"pace-legend"},el("span",null,`${pct}% of milestones done`),timePct!=null?el("span",null,`${timePct}% of time used`):null,pace?el("span",{class:"pill "+pace[0]},pace[1]):null)
+    ):null
+  );
+}
+
+/* ---------- now: current milestone + its next step ---------- */
+const curMs=()=>tMs().find(m=>m.status==="doing")||null;
+const upNext=()=>tMs().find(m=>(m.status||"todo")==="todo")||null;
+function renderNext(){
+  const t=S.newTrack?null:track();$("nextPanel").hidden=!t||S.editingGoal;
+  if(!t)return;
+  const cur=curMs(),nxt=cur?null:upNext(),all=tMs(),box=$("nowMs"),inp=$("nextInput");
+  box.replaceChildren();$("nextField").hidden=!cur;
+  const ach=$("nowAch");ach.replaceChildren();ach.hidden=!cur;
+  if(cur){
+    $("nowLabel").textContent="Now working on";box.append(el("span",null,cur.title));
+    const items=msLog(cur),SHOW=4;
+    ach.append(el("span",{class:"label"},"Achieved so far"+(items.length?` · ${items.length}`:"")));
+    if(items.length){
+      ach.append(el("ul",null,items.slice(0,SHOW).map(x=>el("li",null,el("span",{class:"x"},(x.text||"").split("\n")[0].replace(/\*\*/g,"").slice(0,160),el("small",{class:"mono"},fmtD(x.date)))))));
+      ach.append(el("button",{class:"more",onclick:()=>{S.msFilter=cur.id;render();$("logPanel").scrollIntoView({block:"start"})}},items.length>SHOW?`See all ${items.length} in the log`:"See in the log"));
+    }else ach.append(el("span",{class:"none"},"Nothing yet. Log a Build and pick this milestone to record progress."));
+    if(inp.dataset.ms!==cur.id||document.activeElement!==inp)inp.value=cur.nextStep||"";
+    inp.dataset.ms=cur.id;inp.disabled=!S.canWrite;
+    if(S.focusNow){S.focusNow=false;setTimeout(()=>inp.focus())}
+  }else if(nxt){
+    $("nowLabel").textContent="Up next";box.append(el("span",null,nxt.title));
+    if(S.canWrite)box.append(el("div",null,el("button",{class:"btn",style:"margin-top:6px",onclick:async()=>{S.focusNow=true;await write(()=>S.db.doc("milestones/"+nxt.id).update({status:"doing"}),"Started")}},"Start this milestone")));
+  }else if(all.length){
+    $("nowLabel").textContent="All milestones done";box.append(el("span",null,"Check the goal's finish line above."));
+  }else{
+    $("nowLabel").textContent="Get started";box.append(el("span",null,"Add milestones below, then start the first one."));
+  }
+  const last=tEntries()[0];
+  $("lastSeen").textContent=last?`Last logged ${fmtD(last.date)}: ${(last.text||"").split("\n")[0].slice(0,90)}${(last.text||"").length>90?"…":""}`:"Nothing logged yet. Add your first entry on the right.";
+}
+$("nextInput").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();e.target.blur()}});
+$("nextInput").addEventListener("change",async e=>{const m=S.ms.find(x=>x.id===e.target.dataset.ms);if(!m)return;const v=e.target.value.trim();if(v===(m.nextStep||""))return;await write(()=>S.db.doc("milestones/"+m.id).update({nextStep:v}),"Next step saved")});
+
+/* ---------- milestones ---------- */
+const NEXTS={todo:"doing",doing:"done",done:"todo"};
+const msLog=m=>tEntries().filter(x=>x.milestoneId===m.id&&x.type!=="milestone");
+async function setStatus(m,ns){
+  const was=m.status||"todo";
+  if(!await write(()=>S.db.doc("milestones/"+m.id).update({status:ns,doneAt:ns==="done"?today():""})))return;
+  if(ns==="done"){
+    await write(()=>S.db.collection("entries").doc("ms-"+m.id).set({trackId:m.trackId,type:"milestone",milestoneId:m.id,topicId:"",text:"Reached milestone: "+m.title,url:"",date:today(),createdAt:Date.now()}));
+    const others=tMs().filter(x=>x.id!==m.id);
+    if(!others.some(x=>x.status==="doing")){const n=others.find(x=>(x.status||"todo")==="todo");
+      if(n&&await write(()=>S.db.doc("milestones/"+n.id).update({status:"doing"}))){S.focusNow=true;renderNext();toast(`Milestone reached. What's the first step for the next one?`);return}}
+    toast("Milestone reached and logged");
+  }else if(was==="done"){await write(()=>S.db.doc("entries/ms-"+m.id).delete())}
+}
+function renderMs(){
+  const t=S.newTrack?null:track();$("msPanel").hidden=!t||S.editingGoal;if(!t)return;
+  if(S.editMs&&$("msList").querySelector(`[data-edit="${S.editMs}"]`))return;
+  const ms=tMs(),list=$("msList");list.replaceChildren();
+  $("msCount").textContent=ms.length?`${ms.filter(m=>m.status==="done").length} of ${ms.length} done`:"";
+  if(!ms.length)list.append(el("li",{style:"display:block;color:var(--muted);font-size:14px"},"Break the goal into 3–8 capabilities you'll have along the way."));
+  ms.forEach(m=>{
+    const s=m.status||"todo";
+    if(S.editMs===m.id){
+      const ti=el("input",{type:"text","aria-label":"Milestone"});ti.value=m.title||"";
+      const du=el("input",{type:"date","aria-label":"Target date"});du.value=m.due||"";
+      const nsI=el("input",{type:"text","aria-label":"Next step",placeholder:"Next step for this milestone (optional)",style:"flex:1 1 100%"});nsI.value=m.nextStep||"";
+      const f=el("form",{class:"ms-add",style:"grid-column:1/-1"},ti,du,nsI,el("button",{class:"btn primary",type:"submit"},"Save"),el("button",{class:"btn",type:"button",onclick:()=>{S.editMs=null;renderMs()}},"Cancel"));
+      f.addEventListener("submit",async ev=>{ev.preventDefault();if(await write(()=>S.db.doc("milestones/"+m.id).update({title:ti.value.trim()||m.title,due:du.value||"",nextStep:nsI.value.trim()}))){S.editMs=null;renderMs()}});
+      list.append(el("li",{"data-s":s,"data-edit":m.id},f));setTimeout(()=>ti.focus());return;
+    }
+    const delKey="m:"+m.id;
+    list.append(el("li",{"data-s":s},
+      el("button",{class:"state",title:`Status: ${s}. Click to change.`,"aria-label":`${m.title}: ${s}. Change status`,disabled:!S.canWrite,onclick:()=>setStatus(m,NEXTS[s])},s==="done"?"✓":""),
+      el("div",{class:"mt"},el("button",{class:"mt-btn","aria-pressed":String(S.msFilter===m.id),title:S.msFilter===m.id?"Show all log entries":"Show only this milestone's log entries",onclick:()=>{const on=S.msFilter===m.id;S.msFilter=on?null:m.id;render();if(!on&&matchMedia("(max-width:860px)").matches)$("logPanel").scrollIntoView({block:"start"})}},m.title),
+        el("div",{class:"due mono"},[s==="done"&&m.doneAt?"Done "+fmtD(m.doneAt):m.due?"By "+fmtD(m.due):"",s==="doing"?" · in progress":""].join(""),msLog(m).length?el("span",{class:"logged"}," · "+plural(msLog(m).length,"entry","entries")+" logged"):null),
+        s==="doing"&&m.nextStep?el("div",{class:"ns"},"Next: "+m.nextStep):null),
+      S.canWrite?el("div",{class:"acts"},
+        S.confirmDel===delKey?el("button",{class:"icon-btn danger",onclick:async()=>{S.confirmDel=null;await write(()=>S.db.doc("milestones/"+m.id).delete(),"Milestone removed")}},"Confirm"):el("button",{class:"icon-btn",onclick:()=>{S.editMs=m.id;renderMs()}},"Edit"),
+        S.confirmDel===delKey?el("button",{class:"icon-btn",onclick:()=>{S.confirmDel=null;renderMs()}},"Keep"):el("button",{class:"icon-btn",onclick:()=>{S.confirmDel=delKey;renderMs()}},"Delete")
+      ):el("span")
+    ));
+  });
+  $("msForm").hidden=!S.canWrite;
+}
+$("msForm").addEventListener("submit",async e=>{e.preventDefault();const t=track();const title=$("msTitle").value.trim();if(!t||!title)return;
+  const ms=tMs();const order=ms.length?Math.max(...ms.map(m=>m.order||0))+1:1;
+  if(await write(()=>S.db.collection("milestones").doc().set({trackId:t.id,title,due:$("msDue").value||"",status:"todo",order,doneAt:""}),"Milestone added")){$("msTitle").value="";$("msDue").value=""}});
+
+/* ---------- questions ---------- */
+function renderQs(){
+  const t=S.newTrack?null:track();const qs=t?tEntries().filter(e=>e.type==="question"&&!e.resolved):[];
+  $("qPanel").hidden=!qs.length||S.editingGoal;$("qCount").textContent=qs.length+" open";
+  const l=$("qList");l.replaceChildren();
+  const a=document.activeElement,keep=a&&a.id&&a.id.startsWith("qa_")?{id:a.id,s:a.selectionStart,e:a.selectionEnd}:null;
+  qs.forEach(q=>{const open=S.ansOpen==="q:"+q.id;
+    l.append(el("li",null,el("span",null,q.text),
+      S.canWrite&&!open?el("div",{style:"display:flex;gap:2px;flex-shrink:0"},
+        el("button",{class:"icon-btn",style:"color:var(--accent);font-weight:600",onclick:()=>openAnswer("q",q)},"Answer"),
+        el("button",{class:"icon-btn",onclick:()=>write(()=>S.db.doc("entries/"+q.id).update({resolved:true}),"Marked answered")},"Answered")):null,
+      open?answerForm(q,"q"):null))});
+  if(keep){const n=$(keep.id);if(n){n.focus();try{n.setSelectionRange(keep.s,keep.e)}catch(_){}}}
+}
+/* answer box for question entries (stored on the question itself) */
+S.ansDraft={};
+function openAnswer(where,q){S.ansOpen=where+":"+q.id;S.ansFocus=(where==="q"?"qa_":"ed_ans_")+q.id;render()}
+function answerForm(q,where){
+  const id=(where==="q"?"qa_":"ed_ans_")+q.id;
+  const ta=el("textarea",{id,rows:3,placeholder:"What's the answer? Where did you find it?","aria-label":"Answer"});
+  ta.value=S.ansDraft[q.id]??(q.answer||"");
+  ta.addEventListener("input",()=>S.ansDraft[q.id]=ta.value);
+  const close=()=>{S.ansOpen=null;delete S.ansDraft[q.id];render()};
+  const f=el("form",{class:"ans-form"},ta,el("div",{class:"row"},el("button",{class:"btn primary",type:"submit"},"Save answer"),el("button",{class:"btn",type:"button",onclick:close},"Cancel")));
+  f.addEventListener("submit",async ev=>{ev.preventDefault();const v=ta.value.trim();
+    if(await write(()=>S.db.doc("entries/"+q.id).update(v?{answer:v,resolved:true}:{answer:""}),v?"Answer saved":"Answer cleared"))close()});
+  ta.addEventListener("keydown",k=>{if(k.key==="Enter"&&(k.metaKey||k.ctrlKey)){k.preventDefault();f.requestSubmit()}if(k.key==="Escape")close()});
+  if(S.ansFocus===id){S.ansFocus=null;setTimeout(()=>{const n=$(id);if(n){n.focus();n.scrollIntoView({block:"nearest"})}})}
+  return f;
+}
+
+/* ---------- quick add ---------- */
+function renderTypes(){
+  const w=$("typePick");w.replaceChildren();
+  $("addMsRow").hidden=S.type!=="build";
+  PICK.forEach(t=>w.append(el("button",{type:"button",class:"type",style:`--c:${t.c}`,"aria-pressed":String(S.type===t.k),onclick:()=>{S.type=t.k;S.typeTouched=true;if(t.k==="build"&&!S.msTouched&&curMs()){$("addMs").value=curMs().id;syncDone()}renderTypes()}},el("span",{class:"dot"}),t.n)));
+}
+/* milestone picker in the log form */
+function renderMsSelect(){
+  const sel=$("addMs");const prev=sel.value;const ms=tMs();
+  sel.replaceChildren(el("option",{value:""},"None"),...ms.map(m=>el("option",{value:m.id},(m.status==="done"?"✓ ":m.status==="doing"?"▶ ":"")+m.title)));
+  sel.value=ms.some(m=>m.id===prev)?prev:"";syncDone();
+}
+function syncDone(){const m=S.ms.find(x=>x.id===$("addMs").value);$("addDoneWrap").hidden=!m||m.status==="done";if($("addDoneWrap").hidden)$("addDone").checked=false}
+$("addMs").addEventListener("change",()=>{S.msTouched=true;syncDone()});
+$("addDate").value=today();
+$("addUrl").addEventListener("input",e=>{if(!S.typeTouched&&e.target.value.trim()&&S.type!=="source"){S.type="source";renderTypes()}});
+/* topic picker in the log form */
+function renderTopicSelect(){
+  const sel=$("addTopic");const prev=sel.value;const ts=tTopics();
+  sel.replaceChildren(el("option",{value:"",disabled:true},ts.length?"Choose a topic…":"Create your first topic…"),...ts.map(t=>el("option",{value:t.id},t.name)),el("option",{value:"__new"},"+ New topic…"));
+  let v="";
+  if(S.forceTopic&&ts.some(t=>t.id===S.forceTopic)){v=S.forceTopic;S.forceTopic=null}
+  else if(prev&&((prev==="__new"&&S.newChosen)||ts.some(t=>t.id===prev)))v=prev;
+  else{const pref=(S.topicFilter&&S.topicFilter!=="__none"?S.topicFilter:null)||store.get("ll.topic."+S.cur);if(pref&&ts.some(t=>t.id===pref))v=pref;else if(!ts.length)v="__new"}
+  sel.value=v;$("newTopicField").hidden=sel.value!=="__new";
+}
+$("addTopic").addEventListener("change",e=>{const isNew=e.target.value==="__new";S.newChosen=isNew;$("newTopicField").hidden=!isNew;if(isNew)$("addTopicNew").focus()});
+
+async function createTopic(trackId,name){
+  const existing=tTopics().find(t=>(t.name||"").toLowerCase()===name.toLowerCase());
+  if(existing)return existing.id;
+  const ref=S.db.collection("topics").doc();
+  return (await write(()=>ref.set({trackId,name,createdAt:Date.now()})))?ref.id:null;
+}
+
+$("addForm").addEventListener("submit",async e=>{e.preventDefault();const t=track();if(!t)return;
+  const text=$("addText").value.trim(),url=$("addUrl").value.trim();
+  let topicId=$("addTopic").value;
+  if(!topicId){$("addTopic").focus();toast("Pick a topic for this entry.");return}
+  if(topicId==="__new"&&!$("addTopicNew").value.trim()){$("addTopicNew").focus();toast("Name the new topic.");return}
+  if(!text&&!url){$("addText").focus();toast("Add a line about what you got from it.");return}
+  $("addBtn").disabled=true;
+  if(topicId==="__new"){topicId=await createTopic(t.id,$("addTopicNew").value.trim());if(!topicId){$("addBtn").disabled=false;return}}
+  const msId=S.type==="build"?$("addMs").value:"",completes=S.type==="build"&&$("addDone").checked&&!$("addDoneWrap").hidden;
+  const body={trackId:t.id,topicId,milestoneId:msId,type:S.type,text:text||url,url,date:$("addDate").value||today(),createdAt:Date.now()};
+  if(S.type==="question")body.resolved=false;
+  if(await write(()=>S.db.collection("entries").doc().set(body),completes?null:"Logged")){
+    if(completes){const m=S.ms.find(x=>x.id===msId);if(m)await setStatus(m,"done")}
+    $("addMs").value="";S.msTouched=false;$("addDone").checked=false;syncDone();
+    store.set("ll.topic."+t.id,topicId);S.forceTopic=topicId;$("addTopicNew").value="";
+    $("addText").value="";$("addUrl").value="";$("addDate").value=today();S.typeTouched=false;S.type="insight";renderTypes();renderTopicSelect()}
+  $("addBtn").disabled=false;
+});
+
+/* ---------- topics panel ---------- */
+function renderTopics(){
+  const t=S.newTrack?null:track();const show=!!t&&!S.editingGoal;$("topicPanel").hidden=!show;if(!show)return;
+  $("topicForm").hidden=!S.canWrite;
+  const list=$("topicList");
+  if(S.editTopic&&list.querySelector(`[data-edit="${S.editTopic}"]`))return;
+  list.replaceChildren();
+  const ts=tTopics(),es=tEntries();
+  $("topicCount").textContent=ts.length?plural(ts.length,"topic"):"";
+  if(!ts.length){list.append(el("div",{class:"empty"},el("strong",null,"No topics yet"),el("span",null,"Topics group what you learn, like Git, HTML & CSS or databases. Every log entry belongs to one. Add a topic here or while logging.")));}
+  const row=(key,name,mine,tp)=>{
+    const srcs=mine.filter(e=>e.type==="source"),last=mine[0],on=S.topicFilter===key,delKey="p:"+key;
+    if(tp&&S.editTopic===tp.id){
+      const inp=el("input",{type:"text","aria-label":"Topic name"});inp.value=tp.name||"";
+      const f=el("form",{class:"ms-add",style:"grid-column:1/-1"},inp,el("button",{class:"btn primary",type:"submit"},"Save"),el("button",{class:"btn",type:"button",onclick:()=>{S.editTopic=null;renderTopics()}},"Cancel"));
+      f.addEventListener("submit",async ev=>{ev.preventDefault();const n=inp.value.trim();if(!n)return;if(await write(()=>S.db.doc("topics/"+tp.id).update({name:n}),"Topic renamed")){S.editTopic=null;render()}});
+      setTimeout(()=>inp.focus());return el("div",{class:"topic","data-edit":tp.id},f);
+    }
+    const meta=[plural(srcs.length,"source"),plural(mine.length,"entry","entries"),last?"last "+fmtD(last.date):"nothing logged yet"].join(" · ");
+    const acts=tp&&S.canWrite?el("div",{class:"acts",style:"display:flex;gap:2px"},
+      S.confirmDel===delKey?[el("button",{class:"icon-btn danger",onclick:async()=>{S.confirmDel=null;if(S.topicFilter===key)S.topicFilter=null;await write(()=>S.db.doc("topics/"+tp.id).delete(),"Topic deleted")}},"Confirm"),el("button",{class:"icon-btn",onclick:()=>{S.confirmDel=null;renderTopics()}},"Keep")]
+      :[el("button",{class:"icon-btn",onclick:()=>{S.editTopic=tp.id;renderTopics()}},"Rename"),
+        el("button",{class:"icon-btn",onclick:()=>{if(mine.length){toast(`Move or delete its ${plural(mine.length,"entry","entries")} first.`);return}S.confirmDel=delKey;renderTopics()}},"Delete")]):el("span");
+    const r=el("div",{class:"topic"},
+      el("button",{class:"topic-btn","aria-pressed":String(on),title:on?"Show all topics":"Show only this topic",onclick:()=>{S.topicFilter=on?null:key;if(!on&&tp)S.forceTopic=tp.id;render()}},
+        el("span",{class:"topic-name"},name),el("span",{class:"topic-meta mono"},meta)),acts);
+    if(on){
+      const d=el("div",{class:"topic-detail"},el("span",{class:"label"},"Sources"));
+      if(srcs.length)d.append(el("ul",null,srcs.map(s=>{let host="";try{if(s.url)host=new URL(s.url).hostname.replace(/^www\./,"")}catch(_){host=s.url}
+        return el("li",null,s.url?el("a",{href:s.url,target:"_blank",rel:"noopener noreferrer"},s.text&&s.text!==s.url?s.text:host):s.text,s.url&&s.text&&s.text!==s.url?el("span",{class:"hint"}," · "+host):null)})));
+      else d.append(el("p",{class:"hint"},"No sources yet. Log a video, article or course under this topic."));
+      r.append(d);
+    }
+    return r;
+  };
+  ts.forEach(tp=>list.append(row(tp.id,tp.name||"Untitled",es.filter(e=>e.topicId===tp.id),tp)));
+  const loose=es.filter(e=>!topicOf(e)&&e.type!=="milestone");
+  if(loose.length)list.append(row("__none","No topic",loose,null));
+}
+$("topicForm").addEventListener("submit",async e=>{e.preventDefault();const t=track();const n=$("topicName").value.trim();if(!t||!n)return;
+  const id=await createTopic(t.id,n);if(id){$("topicName").value="";toast("Topic added");S.forceTopic=id;renderTopicSelect()}});
+$("addText").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();$("addForm").requestSubmit()}});
+
+/* ---------- log ---------- */
+function renderFilters(){
+  const f=$("filters");const cur=document.activeElement&&document.activeElement.id==="logSearch";
+  f.replaceChildren();
+  let all=tEntries();
+  if(S.msFilter){const m=S.ms.find(x=>x.id===S.msFilter);all=all.filter(e=>e.milestoneId===S.msFilter);
+    f.append(el("button",{class:"chip","aria-pressed":"true",title:"Show all milestones",onclick:()=>{S.msFilter=null;render()}},`Milestone: ${m?m.title.slice(0,40)+(m.title.length>40?"…":""):""}  ✕`));}
+  if(S.topicFilter){const tp=S.topicFilter==="__none"?null:S.topics.find(x=>x.id===S.topicFilter);
+    all=all.filter(e=>S.topicFilter==="__none"?!topicOf(e)&&e.type!=="milestone":e.topicId===S.topicFilter);
+    f.append(el("button",{class:"chip","aria-pressed":"true",title:"Show all topics",onclick:()=>{S.topicFilter=null;render()}},`Topic: ${tp?tp.name:"No topic"}  ✕`));}
+  [{k:"all",n:"All"},...TYPES].forEach(t=>{const n=t.k==="all"?all.length:all.filter(e=>e.type===t.k).length;
+    f.append(el("button",{class:"chip","aria-pressed":String(S.filter===t.k),style:n||S.filter===t.k?null:"opacity:.55",onclick:()=>{S.filter=t.k;renderLog()}},`${t.n} `,el("span",{class:"mono",style:"opacity:.6"},String(n))))});
+  const s=$("logSearch");if(!cur&&s.value!==S.q)s.value=S.q;
+}
+function editEl(e,opt){
+  const D=S.draft;const T=TMAP[D.type]||TMAP.insight;const d=parseD(e.date);const isMs=e.type==="milestone";
+  const dTxt=d?String(d.getDate()).padStart(2,"0")+" "+d.toLocaleDateString("en-GB",opt.full?{month:"short"}:{weekday:"short"}):"";
+  const types=el("div",{class:"types",role:"group","aria-label":"Entry type"},PICK.map(t=>el("button",{type:"button",class:"type",style:`--c:${t.c}`,"aria-pressed":String(D.type===t.k),onclick:()=>{D.type=t.k;renderLogList()}},el("span",{class:"dot"}),t.n)));
+  const ts=tTopics();
+  const sel=el("select",{id:"ed_topic","aria-label":"Topic"},el("option",{value:"",disabled:true},"Choose a topic…"),...ts.map(x=>el("option",{value:x.id},x.name)));
+  sel.value=ts.some(x=>x.id===D.topicId)?D.topicId:"";sel.addEventListener("change",()=>D.topicId=sel.value);
+  const txt=el("textarea",{id:"ed_text","aria-label":"Entry text",rows:Math.min(12,Math.max(3,Math.ceil((D.text||"").length/70)))});txt.value=D.text;txt.addEventListener("input",()=>D.text=txt.value);
+  const url=el("input",{type:"url",id:"ed_url",placeholder:"Link (optional)","aria-label":"Link"});url.value=D.url;url.addEventListener("input",()=>D.url=url.value);
+  const date=el("input",{type:"date",id:"ed_date","aria-label":"Date"});date.value=D.date;date.addEventListener("input",()=>D.date=date.value);
+  const msSel=el("select",{id:"ed_ms","aria-label":"Progress toward milestone"},el("option",{value:""},"None"),...tMs().map(m=>el("option",{value:m.id},(m.status==="done"?"✓ ":m.status==="doing"?"▶ ":"")+m.title)));
+  msSel.value=tMs().some(m=>m.id===D.milestoneId)?D.milestoneId:"";msSel.addEventListener("change",()=>D.milestoneId=msSel.value);
+  let ans=null;if(D.type==="question"){const cb=el("input",{type:"checkbox",id:"ed_resolved"});cb.checked=!!D.resolved;cb.addEventListener("change",()=>D.resolved=cb.checked);
+    const at=el("textarea",{id:"ed_answer",rows:3,placeholder:"Answer (optional)","aria-label":"Answer"});at.value=D.answer||"";at.addEventListener("input",()=>{D.answer=at.value;if(at.value.trim()&&!D.resolved){D.resolved=true;cb.checked=true}});
+    ans=el("div",{class:"field"},el("label",{class:"label",for:"ed_answer"},"Answer"),at,el("label",{style:"display:flex;gap:6px;align-items:center;font-size:13px"},cb,"Answered"))}
+  const f=el("form",{style:"display:flex;flex-direction:column;gap:10px;padding:8px 0 14px 10px;min-width:0"},
+    isMs?el("span",{class:"hint"},"Milestone entry. Add a link to your evidence: a repo, live URL or screenshot."):el("div",{class:"field"},el("label",{class:"label",for:"ed_topic"},"Topic"),sel),
+    isMs?null:types,
+    isMs||D.type!=="build"?null:el("div",{class:"field"},el("label",{class:"label",for:"ed_ms"},"Progress toward milestone"),msSel),    el("div",{class:"field"},txt),
+    el("div",{class:"row"},el("div",{class:"field"},url),el("div",{class:"field",style:"flex:0 0 auto"},date)),
+    ans,
+    el("div",{class:"row"},el("button",{class:"btn primary",type:"submit"},"Save changes"),el("button",{class:"btn",type:"button",onclick:()=>{S.editEntry=null;S.draft=null;renderLogList()}},"Cancel")));
+  f.addEventListener("submit",async ev=>{ev.preventDefault();
+    const text=D.text.trim(),u=D.url.trim();
+    if(!isMs&&!D.topicId){toast("Pick a topic for this entry.");sel.focus();return}
+    if(!text&&!u){toast("Add a line about what you got from it.");txt.focus();return}
+    const body=isMs?{text:text||u,url:u,date:D.date||e.date||today()}:{type:D.type,topicId:D.topicId,milestoneId:D.type==="build"?(D.milestoneId||""):"",text:text||u,url:u,date:D.date||e.date||today()};
+    if(D.type==="question"){body.resolved=!!D.resolved;body.answer=(D.answer||"").trim()}
+    if(await write(()=>S.db.doc("entries/"+e.id).update(body),"Entry updated")){S.editEntry=null;S.draft=null;renderLogList()}
+  });
+  txt.addEventListener("keydown",k=>{if(k.key==="Enter"&&(k.metaKey||k.ctrlKey)){k.preventDefault();f.requestSubmit()}});
+  return el("article",{class:"entry","data-t":T.k,"data-edit":e.id,style:`--c:${T.c}`},el("div",{class:"d"},dTxt),el("div",{class:"rail"}),f);
+}
+function entryEl(e,opt){
+  if(S.editEntry===e.id&&S.draft)return editEl(e,opt);
+  const T=TMAP[e.type]||TMAP.insight;const delKey="e:"+e.id;const d=parseD(e.date);const tp=topicOf(e);
+  let host="";try{if(e.url)host=new URL(e.url).hostname.replace(/^www\./,"")}catch(_){host=e.url}
+  const dTxt=d?String(d.getDate()).padStart(2,"0")+" "+d.toLocaleDateString("en-GB",opt.full?{month:"short"}:{weekday:"short"}):"";
+  let topicCtl=null;
+  const lm=e.milestoneId&&e.type!=="milestone"?S.ms.find(x=>x.id===e.milestoneId):null;
+  const msCtl=lm&&!opt.hideMs?el("span",{class:"mtag",title:"Progress toward: "+lm.title},"◆ "+lm.title):null;  if(opt.showTopic&&e.type!=="milestone"){topicCtl=tp?el("button",{class:"ttag",title:"Show only this topic",onclick:()=>{S.topicFilter=tp.id;S.forceTopic=tp.id;render()}},tp.name):el("span",{class:"ttag none"},"No topic")}
+  return el("article",{class:"entry","data-t":T.k,style:`--c:${T.c}`},
+    el("div",{class:"d"},dTxt),
+    el("div",{class:"rail"}),
+    el("div",{class:"body"},
+      el("div",{class:"meta"},el("span",{class:"t"},T.n),topicCtl,msCtl,e.type==="question"&&e.resolved?el("span",{class:"resolved"},"Answered"):null,
+        S.canWrite?el("div",{class:"acts"},
+          S.confirmDel===delKey?[el("button",{class:"icon-btn danger",onclick:async()=>{S.confirmDel=null;await write(()=>S.db.doc("entries/"+e.id).delete(),"Entry deleted")}},"Confirm delete"),el("button",{class:"icon-btn",onclick:()=>{S.confirmDel=null;renderLogList()}},"Keep")]
+          :[el("button",{class:"icon-btn",onclick:()=>{S.editEntry=e.id;S.draft={type:e.type||"insight",topicId:e.topicId||"",milestoneId:e.milestoneId||"",text:e.text||"",url:e.url||"",date:e.date||today(),resolved:!!e.resolved,answer:e.answer||""};S.focusEdit=true;renderLogList()}},"Edit"),el("button",{class:"icon-btn",onclick:()=>{S.confirmDel=delKey;renderLogList()}},"Delete")]):null),
+      e.text&&e.text!==e.url?el("div",{class:"txt"},e.text):null,
+      e.url?el("a",{href:e.url,target:"_blank",rel:"noopener noreferrer"},host||e.url,"  ↗"):null,
+      e.type!=="question"?null
+        :S.ansOpen==="l:"+e.id?answerForm(e,"l")
+        :e.answer?el("div",{class:"answer"},el("span",{class:"label"},"Answer",S.canWrite?el("button",{class:"icon-btn",onclick:()=>openAnswer("l",e)},"Edit"):null),el("div",{class:"txt"},e.answer))
+        :S.canWrite?el("button",{class:"link-btn",onclick:()=>openAnswer("l",e)},"+ Add answer"):null));
+}
+function filteredEntries(){
+  let es=tEntries();
+  if(S.msFilter)es=es.filter(e=>e.milestoneId===S.msFilter);
+  if(S.topicFilter)es=es.filter(e=>S.topicFilter==="__none"?!topicOf(e)&&e.type!=="milestone":e.topicId===S.topicFilter);
+  if(S.filter!=="all")es=es.filter(e=>e.type===S.filter);
+  const q=S.q.trim().toLowerCase();if(q)es=es.filter(e=>(e.text||"").toLowerCase().includes(q)||(e.url||"").toLowerCase().includes(q)||(topicOf(e)?.name||"").toLowerCase().includes(q));
+  return es;
+}
+function renderLogList(){
+  const a=document.activeElement,keep=a&&a.id&&a.id.startsWith("ed_")?{id:a.id,s:a.selectionStart,e:a.selectionEnd}:null;
+  drawLog();
+  if(S.editEntry&&!$("log").querySelector(`[data-edit="${S.editEntry}"]`)&&!S.entries.some(x=>x.id===S.editEntry)){S.editEntry=null;S.draft=null}
+  if(keep){const n=$(keep.id);if(n){n.focus();try{if(keep.s!=null)n.setSelectionRange(keep.s,keep.e)}catch(_){}}}
+  else if(S.focusEdit){S.focusEdit=false;const n=$("ed_text");if(n){n.focus();n.scrollIntoView({block:"nearest"})}}
+}
+function drawLog(){
+  const log=$("log");log.replaceChildren();
+  const es=filteredEntries();const n=tEntries().length;
+  $("logCount").textContent=n?plural(n,"entry","entries"):"";
+  if(!es.length){log.append(el("div",{class:"empty"},el("strong",null,n?"Nothing matches":"Your log starts here"),el("span",null,n?"Try another topic, filter or search term.":"Pick a topic, then log the first video you watch, the first thing you build, or a question you want answered.")));return}
+  if(S.view==="milestone"){
+    const ms=tMs(),groups=new Map(ms.map(m=>[m.id,[]]));groups.set("__none",[]);
+    es.forEach(e=>{const k=e.milestoneId&&groups.has(e.milestoneId)?e.milestoneId:"__none";groups.get(k).push(e)});
+    const LBL={todo:["To do","var(--faint)"],doing:["In progress","var(--accent)"],done:["Done","var(--good)"]};
+    for(const[k,list]of groups){
+      if(!list.length)continue;
+      const m=ms.find(x=>x.id===k);const st=LBL[m?.status||"todo"];
+      log.append(el("div",{class:"group-h"},el("h3",null,m?m.title:"Not linked to a milestone"),
+        m?el("span",{style:`color:${st[1]};font-weight:600`},st[0]):null,
+        el("span",{class:"mono"},plural(list.filter(e=>e.type!=="milestone").length,"entry","entries"))));
+      list.forEach(e=>log.append(entryEl(e,{full:true,showTopic:!S.topicFilter,hideMs:true})));
+    }
+    return;
+  }
+  if(S.view==="topic"&&!S.topicFilter){
+    const groups=new Map();
+    es.forEach(e=>{const k=e.type==="milestone"?"__ms":topicOf(e)?.id||"__none";if(!groups.has(k))groups.set(k,[]);groups.get(k).push(e)});
+    for(const[k,list]of groups){
+      const tp=S.topics.find(x=>x.id===k);const srcN=list.filter(e=>e.type==="source").length;
+      log.append(el("div",{class:"group-h"},el("h3",null,tp?tp.name:k==="__ms"?"Milestones reached":"No topic"),el("span",{class:"mono"},plural(list.length,"entry","entries")+" · "+plural(srcN,"source"))));
+      list.forEach(e=>log.append(entryEl(e,{full:true,showTopic:false})));
+    }
+    return;
+  }
+  let lastMonth="";
+  es.forEach(e=>{
+    const d=parseD(e.date);const mk=d?d.toLocaleDateString("en-GB",{month:"long",year:"numeric"}):"Undated";
+    if(mk!==lastMonth){log.append(el("div",{class:"month"},mk));lastMonth=mk}
+    log.append(entryEl(e,{full:false,showTopic:!S.topicFilter}));
+  });
+}
+function renderLog(){const t=S.newTrack?null:track();const show=!!t&&!S.editingGoal;$("addPanel").hidden=!show||!S.canWrite;$("logPanel").hidden=!show;if(!show)return;
+  document.querySelectorAll("#viewSeg button").forEach(b=>{b.setAttribute("aria-pressed",String(b.dataset.v===S.view));b.disabled=!!S.topicFilter&&b.dataset.v==="topic"});
+  renderFilters();renderLogList()}
+document.querySelectorAll("#viewSeg button").forEach(b=>b.addEventListener("click",()=>{S.view=b.dataset.v;store.set("ll.view",S.view);renderLog()}));
+$("logSearch").addEventListener("input",e=>{S.q=e.target.value;renderLogList()});
+
+function render(){
+  if(!S.newTrack&&!track()&&S.tracks.length){S.cur=S.tracks.slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))[0].id}
+  if(S.topicFilter&&S.topicFilter!=="__none"&&S.loaded.p&&!tTopics().some(t=>t.id===S.topicFilter))S.topicFilter=null;
+  if(S.msFilter&&S.loaded.m&&!tMs().some(m=>m.id===S.msFilter))S.msFilter=null;
+  renderTracks();renderGoal();renderNext();renderMs();renderQs();renderTopicSelect();renderMsSelect();renderTopics();renderLog();
+}
+
+/* ---------- local store ----------
+   Same small API the claude.ai version used (collection/doc, set/update/delete, onSnapshot),
+   backed by one JSON object in localStorage. Swap this block for a backend later. */
+const KEY="learning-ledger",BKEY="learning-ledger:lastExport",COLS=["tracks","topics","milestones","entries"];
+const LocalDB=(()=>{
+  const blank=()=>({app:"learning-ledger",schema:1,tracks:[],topics:[],milestones:[],entries:[]});
+  const norm=d=>{const o=blank();COLS.forEach(c=>{o[c]=Array.isArray(d&&d[c])?d[c].filter(r=>r&&typeof r.id==="string"):[]});return o};
+  let memoryOnly=false,state;
+  try{const raw=localStorage.getItem(KEY);state=raw?norm(JSON.parse(raw)):blank()}catch(e){console.error(e);memoryOnly=true;state=blank()}
+  const subs=Object.fromEntries(COLS.map(c=>[c,new Set()]));
+  const snap=c=>({docs:state[c].map(r=>{const{id,...rest}=r;return{id,data:()=>JSON.parse(JSON.stringify(rest))}})});
+  const notify=cs=>queueMicrotask(()=>cs.forEach(c=>subs[c].forEach(cb=>cb(snap(c)))));
+  const persist=()=>{if(memoryOnly)return;try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){throw{code:e&&e.name==="QuotaExceededError"?"quota_exceeded":"unavailable",message:String(e)}}};
+  const commit=(c,before)=>{try{persist()}catch(e){state[c]=before;throw e}notify([c])};
+  const newId=()=>Array.from(crypto.getRandomValues(new Uint8Array(15)),b=>"abcdefghijklmnopqrstuvwxyz0123456789"[b%36]).join("").slice(0,20);
+  const ref=(c,id)=>({id,path:c+"/"+id,
+    async set(data){const before=state[c],row={...JSON.parse(JSON.stringify(data)),id};const i=before.findIndex(r=>r.id===id);state[c]=i<0?[...before,row]:before.map((r,j)=>j===i?row:r);commit(c,before)},
+    async update(data){const before=state[c],i=before.findIndex(r=>r.id===id);if(i<0)throw{code:"invalid_argument",message:"No such record: "+c+"/"+id};
+      const patch=JSON.parse(JSON.stringify(data)),row={...before[i]};for(const[k,v]of Object.entries(patch)){if(v&&v.__delete__)delete row[k];else row[k]=v}
+      state[c]=before.map((r,j)=>j===i?row:r);commit(c,before)},
+    async delete(){const before=state[c];state[c]=before.filter(r=>r.id!==id);commit(c,before)}});
+  const coll=c=>{if(!COLS.includes(c))throw new TypeError("Unknown collection "+c);return{
+    doc:id=>ref(c,id||newId()),
+    onSnapshot(cb){subs[c].add(cb);queueMicrotask(()=>cb(snap(c)));return()=>subs[c].delete(cb)}}};
+  window.addEventListener("storage",e=>{if(e.key===KEY){try{state=e.newValue?norm(JSON.parse(e.newValue)):blank();notify(COLS)}catch(_){}}});
+  return{
+    collection:coll,
+    doc:path=>{const[c,id]=path.split("/");coll(c);return ref(c,id)},
+    get memoryOnly(){return memoryOnly},
+    counts:()=>({tracks:state.tracks.length,entries:state.entries.length}),
+    exportData:()=>({app:"learning-ledger",schema:1,exportedAt:new Date().toISOString(),...Object.fromEntries(COLS.map(c=>[c,state[c]]))}),
+    replaceAll(d){const before=state;state=norm(d);try{persist()}catch(e){state=before;throw e}notify(COLS)},
+    validate(d){if(!d||d.app!=="learning-ledger")return"This isn't a Learning Ledger file.";if(typeof d.schema==="number"&&d.schema>1)return"This file comes from a newer version of the Ledger.";if(!COLS.every(c=>Array.isArray(d[c])))return"This file is missing tracks, topics, milestones or entries.";return null}
+  };
+})();
+
+/* ---------- backup: export / import ---------- */
+function renderBackupState(){
+  const s=$("backupState");let last=null;try{last=localStorage.getItem(BKEY)}catch(_){}
+  if(!last){s.textContent=LocalDB.counts().entries?"Not backed up yet":"";s.className="state"+(LocalDB.counts().entries?" warn":"");return}
+  const days=daysBetween(parseD(last),parseD(today()));
+  s.textContent=days<=0?"Backed up today":days===1?"Backed up yesterday":`Backed up ${days} days ago`;
+  s.className="state"+(days>7?" warn":"");
+}
+$("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(LocalDB.exportData(),null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`learning-ledger-${today()}.json`;
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  try{localStorage.setItem(BKEY,today())}catch(_){}renderBackupState();toast("Backup file saved");
+});
+$("importBtn").addEventListener("click",()=>$("importFile").click());
+$("importFile").addEventListener("change",async e=>{
+  const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;
+  let d;try{d=JSON.parse(await f.text())}catch(_){showBanner("That file isn't valid JSON. Choose a file saved with Export.");return}
+  const err=LocalDB.validate(d);if(err){showBanner(err);return}
+  const cur=LocalDB.counts(),inc={tracks:d.tracks.length,entries:d.entries.length};
+  const go=()=>{try{LocalDB.replaceAll(d);S.cur=null;S.topicFilter=null;S.msFilter=null;hideBanner();toast(`Imported ${plural(inc.tracks,"track")} and ${plural(inc.entries,"entry","entries")}`)}catch(x){showBanner("Couldn't import: this browser's storage is full or blocked.")}};
+  if(!cur.tracks&&!cur.entries){go();return}
+  showBanner(`Replace what's in this browser (${plural(cur.tracks,"track")}, ${plural(cur.entries,"entry","entries")}) with "${f.name}" (${plural(inc.tracks,"track")}, ${plural(inc.entries,"entry","entries")})? Export first if you want to keep the current data.`,
+    [el("button",{class:"btn primary",onclick:go},"Replace"),el("button",{class:"btn",onclick:hideBanner},"Cancel")]);
+});
+function showBanner(msg,btns){const b=$("banner");b.replaceChildren(el("div",null,msg),btns?el("div",{class:"row"},btns):el("div",{class:"row"},el("button",{class:"btn",onclick:hideBanner},"OK")));b.hidden=false;b.scrollIntoView({block:"nearest"})}
+function hideBanner(){const b=$("banner");b.hidden=true;b.replaceChildren();if(LocalDB.memoryOnly)warnMemory()}
+function warnMemory(){const b=$("banner");b.textContent="This browser is blocking storage for this page, so changes will be lost when you close it. Use Export to keep them, or open the page through the start script.";b.hidden=false}
+
+/* ---------- boot ---------- */
+renderTypes();render();
+S.db=LocalDB;S.canWrite=true;
+if(LocalDB.memoryOnly)warnMemory();
+const sub=(col,key,flag)=>LocalDB.collection(col).onSnapshot(snap=>{S[key]=snap.docs.map(d=>({id:d.id,...d.data()}));S.loaded[flag]=true;render();renderBackupState()});
+sub("tracks","tracks","t");sub("entries","entries","e");sub("milestones","ms","m");sub("topics","topics","p");
+})();
+</script>
+</body>
+</html>
