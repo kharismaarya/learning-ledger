@@ -33,8 +33,8 @@ Run `npm test`, `npm run build` and `npm run lint`. If one fails, stop and fix i
 
 **Never verify against the user's Neon database.** The flows below Import with Replace, which wipes everything. Use a throwaway PGlite database (real Postgres compiled to WebAssembly) instead:
 
-1. Once per session, run `npm install @electric-sql/pglite @electric-sql/pglite-socket` in a `pglite/` folder in the scratchpad (never in the project).
-2. Start it in the background: `node node_modules/@electric-sql/pglite-socket/dist/scripts/server.js --port=5499 --max-connections=5`. It's in-memory, so a restart starts empty.
+1. PGlite is a dev dependency of the project, so there's nothing to install.
+2. Start it in the background: `npx pglite-server --port=5499 --max-connections=5`. It's in-memory, so a restart starts empty.
 3. Port 8765 is shared by `npm run dev` and `npm start`, and only one can listen at a time. Stop any server this session started.
 4. Start the app server in the background with the variable set inline. It overrides `.env`, because `process.loadEnvFile` doesn't replace variables that are already set: `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5499/postgres node server/index.ts`.
 
