@@ -3,7 +3,8 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Commands
-- `npm run build` runs `tsc --noEmit && vite build` into `dist/`. It is the only type check, and there is no test suite.
+- `npm run build` runs `tsc --noEmit && vite build` into `dist/`. It is the only type check, and it covers test files too.
+- `npm test` runs Vitest (jsdom). Use `npx vitest run src/App.test.tsx -t "name"` for one test. The first run is slow on this machine (~1 min).
 - `npm run lint` runs ESLint (typescript-eslint + react-hooks rules, `eslint.config.js`). Keep it at zero problems.
 - A Stop hook (`.claude/hooks/typecheck.mjs`) type-checks at the end of a turn when `src/` has uncommitted changes, and sends errors back for you to fix.
 - `npm run dev` (Vite) and `npm start` (`node serve.js`, serves `dist/`) both bind **localhost:8765** with `strictPort`. Only one can run at a time, so stop the other first.
@@ -22,8 +23,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Styling is plain CSS in `src/styles.css`, ported verbatim from the original single-file app. Reuse its existing class names rather than adding inline styles or a CSS framework.
 - Entry type colours come from CSS vars passed as `style={{ "--c": ... } as CSSProperties}`.
 
+## Tests
+- Unit tests sit next to the code (`*.test.ts`). `src/App.test.tsx` renders the whole app with Testing Library and drives it like a user. Add a test there for any new user-facing flow.
+- `src/test/setup.ts` resets the ledger with `LocalDB.replaceAll({})` and clears localStorage before each test. It also polyfills what jsdom lacks (`scrollIntoView`, `matchMedia`, `Blob.text`). If a test fails only in jsdom, check for a missing browser API before blaming the app.
+- `data/learning-ledger-2026-10-10.json` is the fixture, and tests rely on its ids (`webapp`, `m1`–`m8`, `planning`, `claude-code`). Don't edit it. Add a new backup file instead.
+- `user.selectOptions` matches an option's value or its innerHTML, where `&` becomes `&amp;`. Select by value.
+
 ## Verifying changes
-No tests, so verify with `npm run build` and `npm run lint`, then run the app and click through the affected flow in a browser (use `/verify`). Import `data/learning-ledger-*.json` to get realistic data.
+Run `npm test`, `npm run build` and `npm run lint`, then run the app and click through the affected flow in a browser (use `/verify`). Import `data/learning-ledger-*.json` to get realistic data.
 
 ## Git
 - Work on a feature branch, then merge into `main` and push only when the user asks (`/ship`).

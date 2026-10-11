@@ -36,6 +36,7 @@ From a terminal:
 | `npm run build` | Type-check and build the app into `dist/` |
 | `npm start` | Serve `dist/` at http://localhost:8765 |
 | `npm run lint` | Check the code with ESLint |
+| `npm test` | Run the tests once (`npm run test:watch` reruns them as you edit) |
 
 Both `npm run dev` and `npm start` use http://localhost:8765, so they see the same saved data. Only run one at a time.
 The browser keeps data separately for each address, so opening the app any other way starts empty.

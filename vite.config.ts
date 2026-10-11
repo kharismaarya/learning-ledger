@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 // Same port as serve.js, so dev and the built app share this browser's saved data.
@@ -7,4 +7,9 @@ export default defineConfig({
   base: "./",
   build: { outDir: "dist" },
   server: { port: 8765, strictPort: true },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+  },
 });

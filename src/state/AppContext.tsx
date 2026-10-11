@@ -29,7 +29,7 @@ export interface Ui {
 }
 
 const initialView = store.get("ll.view");
-const initialUi: Ui = {
+export const initialUi: Ui = {
   cur: store.get("ll.track"),
   newTrack: false,
   editingGoal: false,
@@ -149,7 +149,7 @@ function useAppState() {
   };
 }
 
-function selectors(data: Ledger, ui: Ui) {
+export function selectors(data: Ledger, ui: Ui) {
   const sortedTracks = data.tracks.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   const curId = data.tracks.some((t) => t.id === ui.cur) ? ui.cur : (sortedTracks[0]?.id ?? null);
   const track: Track | null = ui.newTrack ? null : (data.tracks.find((t) => t.id === curId) ?? null);
