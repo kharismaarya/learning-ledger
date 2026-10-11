@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 - `npm run build` type-checks the app (`tsconfig.json`) and the server (`server/tsconfig.json`), then runs `vite build` into `dist/`. It is the only type check, and it covers test files too.
-- `npm test` runs Vitest (jsdom). Use `npx vitest run src/App.test.tsx -t "name"` for one test. The first run is slow on this machine (~1 min).
+- `npm test` runs Vitest in two projects: **app** (`src/`, jsdom, with the fake API) and **server** (`server/`, plain Node). Use `npx vitest run src/App.test.tsx -t "name"` for one test, or `--project server`. The first run is slow on this machine (~1 min).
 - `npm run lint` runs ESLint (typescript-eslint + react-hooks rules, `eslint.config.js`). Keep it at zero problems.
 - A Stop hook (`.claude/hooks/typecheck.mjs`) type-checks at the end of a turn when `src/` has uncommitted changes, and sends errors back for you to fix.
 - `npm start` runs `node server/index.ts`: it serves the built `dist/` plus the `/api` routes on **localhost:8765**. Rebuild before `npm start` or the app doesn't change.
@@ -16,21 +16,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Deployment (Render)
 - `render.yaml` is a Render Blueprint: free web service in `singapore` (next to Neon's `ap-southeast-1`), `npm ci && npm run build`, then `npm start`. Render deploys from `main`, so **pushing `main` (`/ship`) deploys to production**.
 - Neon branches: **main** = live data, used only by Render (its `DATABASE_URL` lives in Render's dashboard). **dev** = the local `.env`. Never point local runs or tests at main.
-- `HOST` (default `127.0.0.1`) and `APP_PASSWORD` are set only on Render. If `HOST` isn't loopback, `server/index.ts` refuses to start unless `APP_PASSWORD` is at least 16 characters. When `APP_PASSWORD` is set, every request except `GET /healthz` needs HTTP Basic Auth (`checkBasicAuth` in `server/auth.ts`, any username). Without these variables, local runs behave as before: no password.
-- `/healthz` (Render's health check) answers before auth and never queries the database, so health checks don't wake Neon.
+- `HOST` (default `127.0.0.1`) is set only on Render. A non-loopback `HOST` also makes the session cookie `Secure` with the `__Host-` prefix (`{ secure: PUBLIC }` passed to `handleApi`), so the deployed app must be served over HTTPS (Render is). `APP_PASSWORD` and Basic Auth are gone (Phase 3).
+- `/healthz` (Render's health check) answers before the API and never queries the database, so health checks don't wake Neon.
 - The API's Host allowlist (`allowedHosts` in `server/auth.ts`) is localhost, 127.0.0.1 and `RENDER_EXTERNAL_HOSTNAME`, which Render sets automatically. A custom domain (Phase 4) must be added there.
-- The client needs no auth code: browsers resend Basic Auth on same-origin `fetch`. The JSON content-type rule in `server/api.ts` is still the CSRF defence, because browsers also attach Basic Auth to cross-site requests.
+- Accounts (Phase 3): email + password, scrypt hashes (`server/auth.ts`), and a random session token in an `HttpOnly; SameSite=Lax` cookie; the `sessions` table stores only its SHA-256. The client never touches the cookie. `src/db/auth.ts` calls `/api/auth/{signup,signin,signout,me}`; `src/App.tsx` shows `SignInForm` or the app. A 401 becomes `DbError.code === "unauthenticated"` and sends the user back to sign-in; sign-out calls `db.reset()`.
+- CSRF defences: writes must be `application/json` (`readJson` in `server/api.ts`), a cross-site `Origin` is refused, and the cookie is `SameSite=Lax`. Keep all three. Sign-in/sign-up are rate-limited in memory (`RateLimiter`): per email for failed sign-ins, per IP via `CF-Connecting-IP` only (Render's `X-Forwarded-For` can be faked by the client).
+- Email verification and password reset aren't built yet (no email service). Hooks: `server/mail.ts` (explains both), `users.email_verified_at`, `db.deleteSessionsForUser`, and `TODO`s in `server/api.ts`.
 
 ## Data compatibility (don't break the user's saved data)
 - The data lives in Postgres on Neon. The browser reaches it only through the server's `/api` (`server/api.ts`), never directly.
-- localStorage key `learning-ledger` holds data from the earlier browser-only version. `db.load()` moves it into an empty database once and leaves it in place as a spare copy. `learning-ledger:lastExport` and the `ll.*` view prefs stay in localStorage. Never rename these keys.
+- localStorage key `learning-ledger` holds data from the earlier browser-only version. `db.load()` moves it into the signed-in account if that account is empty, once per browser (`learning-ledger:moved` records it), and leaves it in place as a spare copy. `learning-ledger:lastExport` and the `ll.*` view prefs stay in localStorage. Never rename these keys.
 - Keep port 8765, because the one-time move can only read localStorage from the same origin.
 - All reads and writes in the app go through `src/db/db.ts` (Firestore-like `collection().doc().set/update/delete` + `onSnapshot`, over an in-memory cache). Writes reach the cache only after the server confirms them. Components never call `fetch` for records themselves.
 - `src/db/format.ts` (`norm`, `validate`, `COLS`) is shared by the app and the server. Keep it free of browser and Node APIs.
-- Tables and columns are defined in `server/rows.ts` (`FIELDS` + `SCHEMA_SQL`). A new field needs a column there, plus `alter table` for existing databases, because `create table if not exists` won't add it. Fields not listed in `FIELDS` are silently dropped.
+- Tables are created by the numbered `MIGRATIONS` in `server/rows.ts`; `schema_migrations` records which ran (`migrate()` in `server/db.ts`, one transaction, advisory lock). Any schema change is a **new** migration at the end; never edit one that has run on Neon. A new field needs a column (in a migration) and an entry in `FIELDS`. Fields not listed in `FIELDS` are silently dropped.
+- Every record table has `user_id` and the key `(user_id, id)`, with composite foreign keys (`on delete set null (topic_id)` clears only the link). `user_id` is never in `FIELDS`: it always comes from the session. Every function in `server/db.ts` that touches records takes `userId` first and filters on it. Migration 1 moved the pre-accounts tables into the `legacy` schema.
 - Empty strings are stored as NULL. NULL comes back as `""`, or as a missing key for optional fields (`nextStep`, `resolved`, `answer`).
 - The export/import JSON format (`app: "learning-ledger"`, `schema: 1`, `tracks/topics/milestones/entries`, documented in README) must stay readable. Old backups in `data/` must still import. If the schema changes, bump `schema` and migrate in `norm()` in `src/db/format.ts`.
-- Import (`PUT /api/ledger`) replaces everything in one transaction. `linkSafe` drops records whose track is missing and clears links to missing topics or milestones, so the foreign keys don't reject old backups.
+- Import (`PUT /api/ledger`) replaces all of the signed-in user's records in one transaction (other users untouched). `linkSafe` drops records whose track is missing and clears links to missing topics or milestones, so the foreign keys don't reject old backups.
 - SQL uses `$1` parameters only. Table and column names come from `FIELDS`, never from the request.
 - Completing a milestone creates an entry with the fixed id `ms-<milestoneId>`, and reopening it deletes that entry (`setStatus` in `src/state/AppContext.tsx`).
 
@@ -41,8 +44,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Tests
 - Unit tests sit next to the code (`*.test.ts`). `src/App.test.tsx` renders the whole app with Testing Library and drives it like a user. Add a test there for any new user-facing flow.
-- `src/test/setup.ts` replaces `fetch` with `src/test/fakeApi.ts`, an in-memory fake of `/api`, and resets it, the cache and localStorage before each test. Seed data with `fakeApi.data = norm(...)` before `render(<App />)`, then wait for the UI. That way the app loads it the way it does on a real start, with no stray reload partway through the test. Make the server fail with `fakeApi.fail = "network" | 503`.
-- `server/rows.test.ts` covers the SQL mapping without a database. The real SQL isn't covered by `npm test`; check it against PGlite (see Commands).
+- `src/test/setup.ts` replaces `fetch` with `src/test/fakeApi.ts`, an in-memory fake of `/api`, and resets it, the cache and localStorage before each test. Tests start signed in as `ME` (`me@example.com`). Seed data with `fakeApi.data = norm(...)` before `render(<App />)`, then wait for the UI. That way the app loads it the way it does on a real start, with no stray reload partway through the test. Make the server fail with `fakeApi.fail = "network" | 503`; end the session with `fakeApi.switchTo(null)` (each fake account keeps its own data).
+- `server/rows.test.ts` covers the SQL mapping without a database. `server/db.test.ts` runs the real SQL and the HTTP API against an in-process PGlite (port 5498), starting from the pre-accounts schema so migrations are tested too. Add a test there for any new query, and keep the cross-user isolation tests passing.
 - setup.ts also polyfills what jsdom lacks (`scrollIntoView`, `matchMedia`, `Blob.text`). If a test fails only in jsdom, check for a missing browser API before blaming the app.
 - `testTimeout` is 20 s because the whole-app tests take about 6 s each on this machine.
 - `data/learning-ledger-2026-10-10.json` is the fixture, and tests rely on its ids (`webapp`, `m1`–`m8`, `planning`, `claude-code`). Don't edit it. Add a new backup file instead.

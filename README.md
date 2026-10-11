@@ -4,14 +4,14 @@ One home per learning goal: the goal, its milestones, topics, and a log of every
 The app and its small server run on your computer for development, and on [Render](https://render.com) for everyday use.
 Your data is saved in a Postgres database on [Neon](https://neon.tech): the **main** branch holds the live data that Render uses,
 and the **dev** branch is a separate copy for working on the code locally.
-No user accounts yet: locally the server only accepts requests from your own computer, and on Render it asks for a single password.
+Everyone signs in with their own account (email and password) and sees only their own data.
 
 ## What's in the folder
 
 | File | What it is |
 | --- | --- |
 | `src/` | The app: React components (`components/`), app state (`state/AppContext.tsx`), the data module that talks to the server (`db/db.ts`), styles (`styles.css`) |
-| `server/` | The server: serves the app and the `/api` routes (`index.ts`, `api.ts`), and saves to Postgres (`db.ts`, tables in `rows.ts`) |
+| `server/` | The server: serves the app and the `/api` routes (`index.ts`, `api.ts`), accounts and sessions (`auth.ts`), and saves to Postgres (`db.ts`, tables and migrations in `rows.ts`) |
 | `index.html` | Vite entry page |
 | `public/fonts/` | Familjen Grotesk, IBM Plex Sans, IBM Plex Mono (woff2, SIL Open Font License 1.1) and `fonts.css` |
 | `data/learning-ledger-2026-10-10.json` | Your data exported from the claude.ai version: 1 track, 2 topics, 8 milestones, 15 entries |
@@ -38,12 +38,14 @@ React 18 with TypeScript, built with Vite. The server uses [node-postgres](https
 Your computer uses **dev**, so trying things out while coding never touches your live data on **main**.
 
 `.env` contains your database password. It's listed in `.gitignore`, so Git won't commit it. Keep it that way, because this repo is public.
-The server creates its tables the first time it connects.
+The server creates its tables the first time it connects, and updates them when a new version needs it (migrations, listed in `server/rows.ts`).
+Accounts live in the database too, so the account you make locally is in **dev** and the one on Render is in **main**: they're separate.
 
 ## Run it
 
 Double-click `start-windows.bat` (or run `./start-mac-linux.sh`). The first time, it runs `npm install` and `npm run build`.
 After that, it opens http://localhost:8765. Keep the black window open while you use the app.
+The first time, click **Create an account** and choose an email and a password (at least 10 characters).
 
 From a terminal:
 
@@ -61,42 +63,62 @@ After you change the code, run `npm run build` again before `npm start`.
 
 ## Deploy on Render
 
-The deployed app runs on Render's free plan at `https://<name>.onrender.com`, uses the Neon **main** branch, and asks for one password.
+The deployed app runs on Render's free plan at `https://<name>.onrender.com` and uses the Neon **main** branch.
 `render.yaml` describes the service; Render reads it from the `main` branch on GitHub and deploys again after every push to `main`.
 
 Once:
 
-1. Choose a password of at least 16 characters (a password manager can make one). It's never stored in this repo.
-2. In Neon, pick the **main** branch, click **Connect** and copy its connection string.
-3. Sign in at https://render.com with GitHub, then **New** → **Blueprint**, and choose this repository.
-4. Render asks for `DATABASE_URL` (paste the main-branch string) and `APP_PASSWORD` (paste the password). Click **Apply**.
-5. When the deploy finishes, open the address Render shows. The browser asks you to sign in: type anything as the username, and your password.
-6. If main is empty, click **Import** and choose your latest Export. (The browser-data move doesn't apply here: the Render address has its own, empty browser storage.)
+1. In Neon, pick the **main** branch, click **Connect** and copy its connection string.
+2. Sign in at https://render.com with GitHub, then **New** → **Blueprint**, and choose this repository.
+3. Render asks for `DATABASE_URL`: paste the main-branch string. Click **Apply**.
+4. When the deploy finishes, open the address Render shows and click **Create an account**.
+5. Click **Import** and choose your latest Export. (The browser-data move doesn't apply here: the Render address has its own, empty browser storage.)
 
 Good to know:
 
 - The free plan sleeps after 15 minutes without visits. The next visit wakes it, which takes about a minute.
-- To change the password, edit `APP_PASSWORD` under the service's **Environment** tab in Render. It restarts with the new one.
-- On Render, the server only starts if `APP_PASSWORD` is set, because `HOST=0.0.0.0` opens it to the internet.
+- Anyone who finds the address can create an account. They get an empty ledger of their own and can't see yours.
+- A sign-in lasts 30 days on that browser, or until you click **Sign out**.
+
+### Moving to accounts (once, when this version first deploys)
+
+Before accounts, the data had no owner. The first time this version starts, it moves the old tables into a Postgres
+schema called `legacy` (nothing is deleted) and creates new, empty tables where every record belongs to an account.
+To bring your data across:
+
+1. **Before** pushing this version, open the live app and click **Export**. Keep the file.
+2. Push (`/ship`). Render deploys the new version.
+3. Open the app, click **Create an account**, then **Import** the file from step 1.
+4. In Render, open the service's **Environment** tab and delete `APP_PASSWORD`. It isn't used any more.
+5. Once you're happy everything is there, you can delete the old copy in Neon's **SQL Editor**: `drop schema legacy cascade;`
+
+If you forget step 1, the old data is still in `legacy.tracks`, `legacy.entries` and so on, and can be exported from there.
+
+### Coming later
+
+Email verification and password reset need a service that sends email. The hooks are ready: `server/mail.ts`
+explains both, `users.email_verified_at` is in the schema, and the `TODO`s in `server/api.ts` mark where the routes go.
+Until then, there's no "forgot password": keep yours in a password manager.
 
 ## First time: load your data
 
-If you used the browser-only version before, there's nothing to do. The first time the app finds an empty database,
-it moves the data saved in your browser into it and says "Moved your browser data into the database".
-Your browser keeps its old copy too.
+If you used the browser-only version before, there's nothing to do. The first time you sign in on that browser with an empty account,
+the app moves the data saved in the browser into it and says "Moved your browser data into your account".
+Your browser keeps its old copy too. It only happens once per browser, so a second account made there starts empty.
 
 Otherwise, click **Import a backup** (or **Import** in the top bar) and choose `data/learning-ledger-2026-10-10.json`.
 
 ## Where your data lives
 
-In your Neon Postgres database, in four tables: `tracks`, `topics`, `milestones` and `entries`. Each change is saved as soon as you make it.
+In your Neon Postgres database, in four tables: `tracks`, `topics`, `milestones` and `entries`. Every row has a `user_id`: the account it belongs to.
+Accounts are in `users`, and sign-ins in `sessions`. Each change is saved as soon as you make it.
 The app shows a change only after the server confirms it was saved. If the server or database can't be reached, you get a message and nothing changes.
-Clearing your browser data doesn't touch it, and any browser on this computer shows the same data.
+Clearing your browser data doesn't touch it (it only signs you out), and any browser where you sign in shows the same data.
 
 You can look at the data in Neon's **SQL Editor**, for example `select type, text from entries order by date desc;`.
 
 - Click **Export** now and then. It saves `learning-ledger-YYYY-MM-DD.json`. The top bar shows when you last backed up and turns amber after 7 days.
-- **Import** replaces everything in the database, after asking you to confirm.
+- **Import** replaces everything in your account, after asking you to confirm. Other accounts aren't touched.
 - Neon's free plan pauses the database when it's idle, so the first request after a break can take a second or two.
 
 ## Data format
@@ -121,9 +143,9 @@ One JSON object. Ids link records together: an entry points to its track, topic 
 | Before (claude.ai) | Now (local) |
 | --- | --- |
 | Data in a claude.ai-hosted database | Data in your own Postgres database on Neon, plus Export/Import files |
-| Same data on phone and laptop | Same data anywhere, through the password-protected Render address |
+| Same data on phone and laptop | Same data anywhere you sign in, through the Render address |
 | Claude could log entries from a chat | Not available; you can ask Claude for a JSON snippet and import a merged file, or log by hand |
-| claude.ai sign-in decided who can edit | You are the only user |
+| claude.ai sign-in decided who can edit | Each person has their own account and their own data |
 
 Everything else works the same: tracks, topics, milestones with next steps, the Now working on box,
 Build entries counting toward milestones, question answers, and the Timeline / By topic / By milestone views.
@@ -135,16 +157,29 @@ All data access in the app goes through `src/db/db.ts`. It offers the same small
 
 | Route | Does |
 | --- | --- |
-| `GET /api/ledger` | Everything, in the export format |
-| `PUT /api/ledger` | Replace everything (Import) |
+| `POST /api/auth/signup` | `{ email, password }`: create an account and sign in |
+| `POST /api/auth/signin` | `{ email, password }`: sign in |
+| `POST /api/auth/signout` | End this session |
+| `GET /api/auth/me` | `{ email }` of who is signed in, or `{ email: null }` |
+| `GET /api/ledger` | All of your records, in the export format |
+| `PUT /api/ledger` | Replace all of your records (Import) |
 | `PUT /api/<collection>/<id>` | Create or replace one record |
 | `PATCH /api/<collection>/<id>` | Change some fields of one record |
 | `DELETE /api/<collection>/<id>` | Delete one record |
 | `GET /api/health` | `{ ok, db }`: is the server up, and can it reach the database |
-| `GET /healthz` | `ok`, with no password and no database query: Render's health check |
+| `GET /healthz` | `ok`, with no database query: Render's health check |
 
-Without user accounts, the server protects your data like this:
-- Locally, it only listens on 127.0.0.1.
-- On Render, every request needs `APP_PASSWORD` (HTTP Basic Auth).
-- It only accepts writes sent as JSON, which other websites can't send to it.
-- It rejects requests addressed to any host other than localhost or its Render address.
+The record routes answer 401 unless you're signed in. How the server protects your data:
+- **Only your rows.** The account comes from the session, never from the request, and every query has `user_id = $1`.
+  Each table's key is `(user_id, id)`, and links between tables include `user_id`, so a record can't point at someone else's.
+- **Passwords** are stored only as scrypt hashes (slow and memory-hungry on purpose, with a random salt per account).
+- **Sessions** are a random token in a cookie that page scripts can't read (`HttpOnly`), that other sites' requests don't
+  carry (`SameSite=Lax`) and that, on Render, only travels over HTTPS (`Secure`). The database stores only a hash of the token.
+- **Guessing** is slowed down: 10 wrong passwords for one email blocks sign-in to it for 15 minutes; there are per-address limits too.
+  A wrong password and an unknown email get the same answer, in the same time.
+- **Other websites** can't make changes: writes must be JSON (which needs a CORS preflight that the server never approves),
+  and a request whose `Origin` is another site is refused.
+- Locally, it only listens on 127.0.0.1, and it rejects requests addressed to any host other than localhost or its Render address.
+
+Tests: `server/db.test.ts` runs the real SQL against PGlite (Postgres in WebAssembly) inside `npm test`, including
+the checks that one account can't read, change or delete another's records.

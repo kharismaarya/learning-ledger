@@ -10,9 +10,12 @@ import { APP, COLS, SCHEMA, blank, isEmpty, norm, validate, type Row, type State
 /** Where the browser-only version kept its data. Read once, to move it into the database. */
 export const KEY = "learning-ledger";
 export const BKEY = "learning-ledger:lastExport";
+/** Set once the browser-only data has been moved into an account. */
+export const MOVED_KEY = "learning-ledger:moved";
 
 export interface DbError {
-  code: "server_unavailable" | "invalid_argument";
+  /** unauthenticated: not signed in, or the session has expired (HTTP 401) */
+  code: "server_unavailable" | "invalid_argument" | "unauthenticated";
   message: string;
 }
 type Listener = (rows: Row[]) => void;
@@ -20,12 +23,15 @@ type Listener = (rows: Row[]) => void;
 let state: State = blank();
 let loaded = false;
 let loading: Promise<{ moved: boolean }> | null = null;
+/** Goes up on reset(). A load that started before a sign-out checks it and throws its answer away. */
+let generation = 0;
 
 const subs = Object.fromEntries(COLS.map((c) => [c, new Set<Listener>()])) as Record<CollectionName, Set<Listener>>;
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 const notify = (cs: CollectionName[]) => queueMicrotask(() => cs.forEach((c) => subs[c].forEach((cb) => cb(clone(state[c])))));
 
-async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** Call the server. Also used by ./auth.ts for signing in and out. */
+export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch("/api" + path, {
@@ -38,7 +44,10 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
   }
   const data = await res.json().catch(() => null);
   if (!res.ok)
-    throw { code: res.status >= 500 ? "server_unavailable" : "invalid_argument", message: data?.error || res.statusText } satisfies DbError;
+    throw {
+      code: res.status === 401 ? "unauthenticated" : res.status >= 500 ? "server_unavailable" : "invalid_argument",
+      message: data?.error || res.statusText,
+    } satisfies DbError;
   return data as T;
 }
 
@@ -106,13 +115,35 @@ function readBrowserData(): State | null {
   }
 }
 
+function movedAlready(): boolean {
+  try {
+    return !!localStorage.getItem(MOVED_KEY);
+  } catch {
+    return true; // storage blocked: there's nothing to move anyway
+  }
+}
+
+function markMoved() {
+  try {
+    localStorage.setItem(MOVED_KEY, new Date().toISOString());
+  } catch {
+    /* storage blocked */
+  }
+}
+
 async function doLoad(): Promise<{ moved: boolean }> {
+  const gen = generation;
   let d = norm(await api("GET", "/ledger"));
+  if (gen !== generation) return { moved: false };
   let moved = false;
-  // First run with a database: move what this browser saved before. localStorage is left as a spare copy.
-  const local = isEmpty(d) ? readBrowserData() : null;
+  // First sign-in on this browser: move what it saved before accounts existed into the (empty) account.
+  // localStorage is left as a spare copy. MOVED_KEY makes it happen once per browser: without it, every new
+  // account made in this browser would start with the first person's old data.
+  const local = isEmpty(d) && !movedAlready() ? readBrowserData() : null;
   if (local && !isEmpty(local)) {
     d = norm(await api("PUT", "/ledger", { app: APP, schema: SCHEMA, ...local }));
+    if (gen !== generation) return { moved: false };
+    markMoved();
     moved = true;
   }
   state = d;
@@ -141,5 +172,13 @@ export const db = {
     notify(COLS);
   },
   validate,
+  /** Forget everything in the cache (signing out), so the next person to sign in in this tab never sees it. */
+  reset() {
+    generation++;
+    state = blank();
+    loaded = false;
+    loading = null;
+    notify(COLS);
+  },
 };
 export type Db = typeof db;

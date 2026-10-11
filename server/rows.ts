@@ -51,38 +51,86 @@ export const FIELDS: Record<CollectionName, Field[]> = {
   ],
 };
 
-/** The tables, in the order they can be filled (each one only links to tables before it). */
-export const SCHEMA_SQL = `
-create table if not exists tracks (
-  id text primary key,
-  title text, outcome text, why text, done_when text, start_date text, target_date text, next_step text,
-  created_at bigint
-);
-create table if not exists topics (
-  id text primary key,
-  track_id text not null references tracks(id) on delete cascade,
-  name text,
-  created_at bigint
-);
-create table if not exists milestones (
-  id text primary key,
-  track_id text not null references tracks(id) on delete cascade,
-  ord integer,
-  title text,
-  status text check (status in ('todo', 'doing', 'done')),
-  due text, done_at text, next_step text
-);
-create table if not exists entries (
-  id text primary key,
-  track_id text not null references tracks(id) on delete cascade,
-  topic_id text references topics(id) on delete set null,
-  milestone_id text references milestones(id) on delete set null,
-  type text check (type in ('source', 'insight', 'question', 'build', 'milestone')),
-  text text, url text, date text,
-  created_at bigint,
-  resolved boolean,
-  answer text
-);`;
+/* The database schema, as a list of migrations. Each one runs once, in order, and the schema_migrations table records
+   which have run (server/db.ts). `create table if not exists` can't change a table that's already there, so any change
+   to an existing table needs a new migration at the end of this list. Never edit one that has already run on Neon.
+
+   Every record belongs to a user. Each table's key is (user_id, id), not just id, because ids are made by the browser
+   and two people can import the same backup. The foreign keys include user_id too, so a topic can only ever point at a
+   track of the same user. user_id isn't in FIELDS: it always comes from the session, never from a request. */
+export const MIGRATIONS: string[] = [
+  `-- 1: accounts. Tables from before accounts had no owner, so they move aside into a "legacy" schema (they keep their
+  -- rows, indexes and constraints, and the new tables can reuse the names). Export/Import moves the data to an account.
+  do $$ begin
+    if to_regclass('public.tracks') is not null then
+      create schema if not exists legacy;
+      alter table public.entries set schema legacy;
+      alter table public.milestones set schema legacy;
+      alter table public.topics set schema legacy;
+      alter table public.tracks set schema legacy;
+    end if;
+  end $$;
+
+  create table users (
+    id text primary key,
+    email text not null unique check (email = lower(email)),
+    password_hash text not null,
+    email_verified_at timestamptz, -- set by email verification, once there's an email service
+    created_at timestamptz not null default now()
+  );
+  create table sessions (
+    token_hash text primary key, -- sha256 of the cookie's token; the token itself is never stored
+    user_id text not null references users(id) on delete cascade,
+    created_at timestamptz not null default now(),
+    expires_at timestamptz not null
+  );
+  create index sessions_user_id on sessions (user_id);
+
+  create table tracks (
+    user_id text not null references users(id) on delete cascade,
+    id text not null,
+    title text, outcome text, why text, done_when text, start_date text, target_date text, next_step text,
+    created_at bigint,
+    primary key (user_id, id)
+  );
+  create table topics (
+    user_id text not null,
+    id text not null,
+    track_id text not null,
+    name text,
+    created_at bigint,
+    primary key (user_id, id),
+    foreign key (user_id, track_id) references tracks(user_id, id) on delete cascade
+  );
+  create table milestones (
+    user_id text not null,
+    id text not null,
+    track_id text not null,
+    ord integer,
+    title text,
+    status text check (status in ('todo', 'doing', 'done')),
+    due text, done_at text, next_step text,
+    primary key (user_id, id),
+    foreign key (user_id, track_id) references tracks(user_id, id) on delete cascade
+  );
+  create table entries (
+    user_id text not null,
+    id text not null,
+    track_id text not null,
+    topic_id text,
+    milestone_id text,
+    type text check (type in ('source', 'insight', 'question', 'build', 'milestone')),
+    text text, url text, date text,
+    created_at bigint,
+    resolved boolean,
+    answer text,
+    primary key (user_id, id),
+    foreign key (user_id, track_id) references tracks(user_id, id) on delete cascade,
+    -- "set null (topic_id)" clears just the link and keeps user_id (Postgres 15+)
+    foreign key (user_id, topic_id) references topics(user_id, id) on delete set null (topic_id),
+    foreign key (user_id, milestone_id) references milestones(user_id, id) on delete set null (milestone_id)
+  );`,
+];
 
 function toCol(v: unknown, kind: Kind): unknown {
   if (v === undefined || v === null) return null;

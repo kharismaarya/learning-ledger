@@ -12,11 +12,10 @@ services:
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
-      # listen for requests from the internet, not just from inside the server; needs APP_PASSWORD (server/index.ts)
+      # listen for requests from the internet, not just from inside the server. Also makes the session cookie
+      # HTTPS-only (server/index.ts). Everyone signs in with their own account.
       - key: HOST
         value: 0.0.0.0
       # sync: false means Render asks for the value in its dashboard. Secrets never go in this file: the repo is public.
       - key: DATABASE_URL # the Neon "main" branch connection string
-        sync: false
-      - key: APP_PASSWORD # 16+ characters
         sync: false

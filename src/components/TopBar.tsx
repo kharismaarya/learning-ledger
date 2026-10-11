@@ -109,6 +109,12 @@ export function TopBar() {
           Import
         </button>
         <input type="file" id="importFile" accept=".json,application/json" hidden ref={app.importInput} onChange={importFile} />
+        <span className="state" id="accountEmail" title="Signed in as">
+          {app.account.email}
+        </span>
+        <button className="btn" type="button" onClick={app.signOut}>
+          Sign out
+        </button>
       </div>
     </header>
   );

@@ -21,6 +21,7 @@ Run `git diff --stat main...HEAD` plus `git status --short` to list changed file
 | `GoalPanel.tsx` | create a track, edit the goal, pace bar and days left |
 | `styles.css`, `index.html`, fonts | screenshots at 1280px and 390px (no horizontal scroll), fonts loaded |
 | `server/index.ts`, `vite.config.ts`, `package.json` | step 3 routes, plus the core flow |
+| `server/auth.ts`, `src/db/auth.ts`, `SignInForm.tsx`, `App.tsx` | step 3 account checks, then: create account A, import, reload (still signed in), sign out (sign-in form, no data); create account B (empty, the same backup imports without clashing); sign back in as A (A's data intact); wrong password shows the error |
 
 **Core flow** (always do it): import the backup, add one entry, complete the in-progress milestone, check the log.
 
@@ -41,22 +42,24 @@ Then `curl`:
 - 200 for `/`, `/fonts/fonts.css` and the JS file named in `dist/index.html`;
 - `/api/health` must say `{"ok":true,"db":true}`.
 
-If the server changed, also check the guard rails: a PUT with `Content-Type: text/plain` gets 415, a `Host: evil.example` header gets 403, and `/api/users/x` gets 404.
+If the server changed, also check the guard rails with `curl` (keep a cookie jar: `-c jar -b jar`):
+- `/api/ledger` with no cookie → 401;
+- `POST /api/auth/signup` with `{"email":"a@example.com","password":"a long password"}` → 200 and a `Set-Cookie: ll_session=…; HttpOnly; SameSite=Lax` header; then `/api/ledger` with the jar → 200;
+- `POST /api/auth/signin` with a wrong password → 401 `Email or password is wrong.`;
+- a PUT with `Content-Type: text/plain` → 415; a `Host: evil.example` header → 403; a PUT with `Origin: https://evil.example` → 403; `/api/users/x` signed in → 404;
+- `/healthz` → 200 `ok`.
 
-If `server/index.ts`, `server/auth.ts` or `render.yaml` changed, also check the password mode (what Render runs). Restart the server with `APP_PASSWORD=<any 16+ chars>` added inline, still on PGlite, and `curl`:
-- `/` and `/api/ledger` with no credentials → 401 with a `WWW-Authenticate: Basic …` header;
-- `-u x:wrong` → 401;
-- `-u x:<password>` → 200;
-- `/healthz` with no credentials → 200 `ok`;
-- `-u x:<password> -H "Host: evil.example" /api/ledger` → 403.
+If `server/index.ts`, `server/auth.ts` or `render.yaml` changed, also restart once with `HOST=0.0.0.0` inline (still on PGlite) and check that sign-up's cookie is now `__Host-ll_session=…; …; Secure`. Browsers drop Secure cookies on plain http, so restart without `HOST` before the browser steps.
 
-Also check that `HOST=0.0.0.0` without `APP_PASSWORD` exits with an error instead of starting. To drive the password mode in a browser, use a `playwright-core` script with `browser.newContext({ httpCredentials: { username: "x", password } })`. The MCP plugin can't answer the sign-in pop-up. Restart without `APP_PASSWORD` before the browser steps below.
+To watch a migration run, seed the PGlite database with the old schema first (see `OLD_SCHEMA` in `server/db.test.ts`), then start the server: it logs `Database: ran migration N.`
+
+The app always starts at the sign-in form, so step 4 begins by creating an account.
 
 ## 4. Drive it with the Playwright plugin
 
 Load the `mcp__plugin_playwright_playwright__*` tools (ToolSearch) and use them. Prefer `browser_snapshot` refs over guessing selectors: the snapshot shows the accessible names. They're what the user sees, and they're stable across class changes.
 
-1. **Start clean.** The plugin's browser keeps its profile between runs. It's separate from the user's own browser, so their real data is safe, but data from the previous verify run is still there. `browser_navigate` to http://localhost:8765, then `browser_evaluate` `() => { localStorage.clear(); location.reload(); }`.
+1. **Start clean.** The plugin's browser keeps its profile between runs. It's separate from the user's own browser, so their real data is safe, but data from the previous verify run is still there. `browser_navigate` to http://localhost:8765, then `browser_evaluate` `() => { localStorage.clear(); location.reload(); }`. If the app is still signed in from last time, click **Sign out**. Then click **Create an account** and sign up with a fresh email (e.g. `verify-<time>@example.com`) and a 10+ character password. PGlite is in-memory, so accounts vanish when it restarts.
 2. **Load realistic data.** Click **Import**. A file chooser opens. Call `browser_file_upload` with the absolute path of `data/learning-ledger-2026-10-10.json`. If a "Replace what's in the database…" banner appears, click **Replace**. Expect the toast "Imported 1 track and 15 entries".
    - Clearing localStorage in step 1 matters: if the database is empty and localStorage has old data, the app moves that data in first.
 3. **Drive the flows from step 1.** After each action, confirm the result the user would see: the counts (`15 entries`, `1 of 8 done`), which milestone is in progress, the new row in the log. Clicking without checking the outcome isn't verification.

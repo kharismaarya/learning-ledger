@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { signOut as endSession, type Account } from "../db/auth";
 import { db, type DbError } from "../db/db";
 import { useLedger, type Ledger } from "../db/useLedger";
 import { store } from "../lib/localStore";
@@ -51,7 +52,15 @@ export interface BannerState {
   buttons?: ReactNode;
 }
 
-function useAppState() {
+export interface SessionProps {
+  account: Account;
+  /** back to the sign-in form, optionally with a message to show there */
+  onSignedOut: (notice?: string) => void;
+}
+
+const EXPIRED = "You've been signed out (your session ended). Sign in again to carry on.";
+
+function useAppState({ account, onSignedOut }: SessionProps) {
   const data = useLedger();
   const [ui, setUi] = useState<Ui>(initialUi);
   const set = useCallback((patch: Partial<Ui>) => setUi((u) => ({ ...u, ...patch })), []);
@@ -78,6 +87,10 @@ function useAppState() {
         if (okMsg) toast(okMsg);
         return true;
       } catch (e) {
+        if ((e as DbError)?.code === "unauthenticated") {
+          onSignedOut(EXPIRED + " Your last change wasn't saved.");
+          return false;
+        }
         toast(
           (e as DbError)?.code === "server_unavailable"
             ? "Couldn't reach the server, so this wasn't saved. Is it still running?"
@@ -87,7 +100,7 @@ function useAppState() {
         return false;
       }
     },
-    [toast],
+    [toast, onSignedOut],
   );
 
   /* fetch the data from the server once, when the app opens.
@@ -98,10 +111,11 @@ function useAppState() {
       ({ moved }) => {
         if (!mounted.current) return;
         setBanner(null);
-        if (moved) toast("Moved your browser data into the database");
+        if (moved) toast("Moved your browser data into your account");
       },
-      () =>
-        mounted.current &&
+      (e: DbError) => {
+        if (!mounted.current) return;
+        if (e?.code === "unauthenticated") return onSignedOut(EXPIRED);
         setBanner({
           msg: "Can't reach the database. Check that the server is running (npm start) and that you're online.",
           buttons: (
@@ -109,9 +123,10 @@ function useAppState() {
               Retry
             </button>
           ),
-        }),
+        });
+      },
     );
-  }, [toast]);
+  }, [toast, onSignedOut]);
   useEffect(() => {
     mounted.current = true;
     load();
@@ -155,12 +170,23 @@ function useAppState() {
     return (await write(() => ref.set({ trackId, name, createdAt: Date.now() }))) ? ref.id : null;
   }
 
+  async function signOut() {
+    try {
+      await endSession();
+      onSignedOut();
+    } catch {
+      toast("Couldn't reach the server, so you're still signed in.");
+    }
+  }
+
   function selectTrack(id: string) {
     set({ cur: id, newTrack: false, editingGoal: false, topicFilter: null, msFilter: null });
     store.set("ll.track", id);
   }
 
   return {
+    account,
+    signOut,
     data,
     ui,
     set,
@@ -203,8 +229,8 @@ export function selectors(data: Ledger, ui: Ui) {
 export type App = ReturnType<typeof useAppState>;
 const Ctx = createContext<App | null>(null);
 
-export function AppProvider({ children }: { children: ReactNode }) {
-  const app = useAppState();
+export function AppProvider({ children, ...session }: SessionProps & { children: ReactNode }) {
+  const app = useAppState(session);
   return <Ctx.Provider value={app}>{children}</Ctx.Provider>;
 }
 

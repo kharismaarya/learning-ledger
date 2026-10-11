@@ -3,9 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import backup from "../data/learning-ledger-2026-10-10.json";
 import { App } from "./App";
-import { KEY, db } from "./db/db";
+import { KEY, MOVED_KEY, db } from "./db/db";
 import { norm } from "./db/format";
-import { fakeApi } from "./test/fakeApi";
+import { ME, fakeApi } from "./test/fakeApi";
 import type { Entry, Milestone } from "./types";
 
 const saved = () => fakeApi.data as unknown as { entries: Entry[]; milestones: Milestone[]; topics: { name: string }[] };
@@ -208,7 +208,7 @@ describe("Learning Ledger app", () => {
   it("moves data saved by the browser-only version into an empty database, once", async () => {
     localStorage.setItem(KEY, JSON.stringify(backup));
     render(<App />);
-    await toast("Moved your browser data into the database");
+    await toast("Moved your browser data into your account");
     expect(byId("logCount")).toHaveTextContent("15 entries");
     expect(saved().entries).toHaveLength(15);
     // the browser copy stays as a spare
@@ -229,11 +229,11 @@ describe("Learning Ledger app", () => {
     fakeApi.fail = "network";
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText(/Can't reach the database/)).toBeInTheDocument();
+    expect(await screen.findByText(/Can't reach the server/)).toBeInTheDocument();
     fakeApi.fail = null;
     await user.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(screen.queryByText(/Can't reach the database/)).toBeNull());
-    expect(byId("logCount")).toHaveTextContent("15 entries");
+    await waitFor(() => expect(byId("logCount")).toHaveTextContent("15 entries"));
+    expect(screen.queryByText(/Can't reach the server/)).toBeNull();
   });
 
   it("a write the server can't save shows a toast and leaves the screen unchanged", async () => {
@@ -259,5 +259,88 @@ describe("Learning Ledger app", () => {
     expect(msHeads[0]).toMatch(/^Set up the toolkit/);
     expect(msHeads).toContain("Not linked to a milestone");
     expect(localStorage.getItem("ll.view")).toBe("milestone");
+  });
+});
+
+describe("Accounts", () => {
+  /** Fill in the sign-in form (or the create-account form, if it's showing) and submit it. */
+  async function fillAuth(user: ReturnType<typeof userEvent.setup>, email: string, password: string, button: string) {
+    await user.type(await screen.findByLabelText("Email"), email);
+    await user.type(screen.getByLabelText("Password"), password);
+    await user.click(screen.getByRole("button", { name: button }));
+  }
+
+  it("asks you to sign in, then shows your data", async () => {
+    fakeApi.data = norm(structuredClone(backup));
+    fakeApi.switchTo(null);
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.queryByText("Learn Git")).toBeNull();
+    await fillAuth(user, ME.email, ME.password, "Sign in");
+    await screen.findByRole("heading", { name: /Build a web app with Claude Code/ });
+    expect(byId("accountEmail")).toHaveTextContent(ME.email);
+  });
+
+  it("shows the server's message when the password is wrong", async () => {
+    fakeApi.switchTo(null);
+    const user = userEvent.setup();
+    render(<App />);
+    await fillAuth(user, ME.email, "not the password", "Sign in");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Email or password is wrong.");
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+  });
+
+  it("creates an account, which starts empty", async () => {
+    fakeApi.data = norm(structuredClone(backup));
+    fakeApi.switchTo(null);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Create an account" }));
+    expect(screen.getByLabelText("Password")).toHaveAttribute("autocomplete", "new-password");
+    await fillAuth(user, "new@example.com", "a long new password", "Create account");
+    expect(await screen.findByText("No learning track yet")).toBeInTheDocument();
+    expect(byId("accountEmail")).toHaveTextContent("new@example.com");
+  });
+
+  it("signing out hides your data, and the next person sees only theirs", async () => {
+    const user = await withBackup();
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Build a web app with Claude Code/ })).toBeNull();
+    expect(db.counts()).toEqual({ tracks: 0, entries: 0 }); // the cache was cleared too
+
+    await user.click(screen.getByRole("button", { name: "Create an account" }));
+    await fillAuth(user, "other@example.com", "another long password", "Create account");
+    expect(await screen.findByText("No learning track yet")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await fillAuth(user, ME.email, ME.password, "Sign in");
+    await screen.findByRole("heading", { name: /Build a web app with Claude Code/ });
+    expect(byId("logCount")).toHaveTextContent("15 entries");
+  });
+
+  it("goes back to sign-in when the session ends while you're working", async () => {
+    const user = await withBackup();
+    await user.selectOptions(byId("addTopic"), "planning");
+    await user.type(byId("addText"), "Typed after the session ended");
+    fakeApi.switchTo(null); // the session expired on the server
+    await user.click(screen.getByRole("button", { name: "Add to log" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/signed out.*wasn't saved/);
+    expect(screen.getByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+  });
+
+  it("moves old browser data into only the first account that signs in on this browser", async () => {
+    localStorage.setItem(KEY, JSON.stringify(backup));
+    const user = userEvent.setup();
+    render(<App />);
+    await toast("Moved your browser data into your account");
+    expect(localStorage.getItem(MOVED_KEY)).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await user.click(await screen.findByRole("button", { name: "Create an account" }));
+    await fillAuth(user, "second@example.com", "another long password", "Create account");
+    expect(await screen.findByText("No learning track yet")).toBeInTheDocument();
+    expect(fakeApi.data.entries).toHaveLength(0);
   });
 });

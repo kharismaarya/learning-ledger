@@ -133,4 +133,20 @@ describe("db.load", () => {
     fakeApi.fail = null;
     await expect(db.load()).resolves.toEqual({ moved: false });
   });
+
+  it("a 401 means unauthenticated, so the app can ask you to sign in", async () => {
+    fakeApi.switchTo(null);
+    await expect(db.load()).rejects.toMatchObject({ code: "unauthenticated" } satisfies Partial<DbError>);
+    await expect(db.collection("topics").doc().set(topic)).rejects.toMatchObject({ code: "unauthenticated" });
+  });
+
+  it("reset empties the cache, and a load still running when it happens is thrown away", async () => {
+    fakeApi.data = structuredClone(backup) as never;
+    await db.load();
+    expect(db.counts().entries).toBe(15);
+    const late = db.load(); // still waiting for the server...
+    db.reset(); // ...when someone signs out
+    await late;
+    expect(db.counts()).toEqual({ tracks: 0, entries: 0 });
+  });
 });

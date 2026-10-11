@@ -9,10 +9,13 @@ export default defineConfig({
   build: { outDir: "dist" },
   server: { port: 8765, strictPort: true, proxy: { "/api": "http://127.0.0.1:8766" } },
   test: {
-    environment: "jsdom",
     // the app tests drive a whole UI with user-event; on this machine some take ~6 s, over the 5 s default
     testTimeout: 20_000,
-    setupFiles: ["src/test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}", "server/**/*.test.ts"],
+    projects: [
+      // the browser app, in a fake browser (jsdom), with /api replaced by an in-memory fake (src/test/fakeApi.ts)
+      { extends: true, test: { name: "app", environment: "jsdom", setupFiles: ["src/test/setup.ts"], include: ["src/**/*.test.{ts,tsx}"] } },
+      // the server, in plain Node; server/db.test.ts runs a real Postgres (PGlite) in-process
+      { extends: true, test: { name: "server", environment: "node", include: ["server/**/*.test.ts"] } },
+    ],
   },
 });
