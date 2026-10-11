@@ -1,0 +1,22 @@
+# Render "Blueprint": how Render builds and runs the app. Render reads this file from the main branch,
+# and every push to main deploys again. See "Deploy on Render" in README.md.
+services:
+  - type: web
+    name: learning-ledger
+    runtime: node
+    plan: free
+    region: singapore # next to the Neon database (AWS ap-southeast-1), so each query is a short trip
+    branch: main
+    # npm ci installs exactly what package-lock.json lists, including devDependencies (tsc, vite) that the build needs
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      # listen for requests from the internet, not just from inside the server; needs APP_PASSWORD (server/index.ts)
+      - key: HOST
+        value: 0.0.0.0
+      # sync: false means Render asks for the value in its dashboard. Secrets never go in this file: the repo is public.
+      - key: DATABASE_URL # the Neon "main" branch connection string
+        sync: false
+      - key: APP_PASSWORD # 16+ characters
+        sync: false

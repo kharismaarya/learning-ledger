@@ -43,6 +43,15 @@ Then `curl`:
 
 If the server changed, also check the guard rails: a PUT with `Content-Type: text/plain` gets 415, a `Host: evil.example` header gets 403, and `/api/users/x` gets 404.
 
+If `server/index.ts`, `server/auth.ts` or `render.yaml` changed, also check the password mode (what Render runs). Restart the server with `APP_PASSWORD=<any 16+ chars>` added inline, still on PGlite, and `curl`:
+- `/` and `/api/ledger` with no credentials → 401 with a `WWW-Authenticate: Basic …` header;
+- `-u x:wrong` → 401;
+- `-u x:<password>` → 200;
+- `/healthz` with no credentials → 200 `ok`;
+- `-u x:<password> -H "Host: evil.example" /api/ledger` → 403.
+
+Also check that `HOST=0.0.0.0` without `APP_PASSWORD` exits with an error instead of starting. To drive the password mode in a browser, use a `playwright-core` script with `browser.newContext({ httpCredentials: { username: "x", password } })`. The MCP plugin can't answer the sign-in pop-up. Restart without `APP_PASSWORD` before the browser steps below.
+
 ## 4. Drive it with the Playwright plugin
 
 Load the `mcp__plugin_playwright_playwright__*` tools (ToolSearch) and use them. Prefer `browser_snapshot` refs over guessing selectors: the snapshot shows the accessible names. They're what the user sees, and they're stable across class changes.

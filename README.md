@@ -1,8 +1,10 @@
-# Learning Ledger — local edition
+# Learning Ledger
 
 One home per learning goal: the goal, its milestones, topics, and a log of everything you watch, learn, ask and build.
-The app and its small server run on your computer. Your data is saved in a Postgres database on [Neon](https://neon.tech), online.
-No user accounts yet: the server only accepts requests from your own computer.
+The app and its small server run on your computer for development, and on [Render](https://render.com) for everyday use.
+Your data is saved in a Postgres database on [Neon](https://neon.tech): the **main** branch holds the live data that Render uses,
+and the **dev** branch is a separate copy for working on the code locally.
+No user accounts yet: locally the server only accepts requests from your own computer, and on Render it asks for a single password.
 
 ## What's in the folder
 
@@ -14,6 +16,7 @@ No user accounts yet: the server only accepts requests from your own computer.
 | `public/fonts/` | Familjen Grotesk, IBM Plex Sans, IBM Plex Mono (woff2, SIL Open Font License 1.1) and `fonts.css` |
 | `data/learning-ledger-2026-10-10.json` | Your data exported from the claude.ai version: 1 track, 2 topics, 8 milestones, 15 entries |
 | `.env.example` | Template for `.env`, which holds your database connection string |
+| `render.yaml` | How Render builds and runs the deployed app |
 | `start-windows.bat`, `start-mac-linux.sh` | Build on first run, then start the server and open the app |
 
 ## Libraries
@@ -28,9 +31,11 @@ React 18 with TypeScript, built with Vite. The server uses [node-postgres](https
 
 ## Set up the database (once)
 
-1. Sign up at https://neon.tech and create a project.
-2. In the project, click **Connect** and copy the connection string. It starts with `postgresql://` and ends with `sslmode=require`.
+1. Sign up at https://neon.tech and create a project. It starts with a `main` branch; create a `dev` branch from it too.
+2. In the project, pick the **dev** branch, click **Connect** and copy the connection string. It starts with `postgresql://`.
 3. In this folder, copy `.env.example` to `.env` and paste the string after `DATABASE_URL=`.
+
+Your computer uses **dev**, so trying things out while coding never touches your live data on **main**.
 
 `.env` contains your database password. It's listed in `.gitignore`, so Git won't commit it. Keep it that way, because this repo is public.
 The server creates its tables the first time it connects.
@@ -53,6 +58,26 @@ From a terminal:
 
 Both `npm run dev` and `npm start` use http://localhost:8765, so only run one at a time.
 After you change the code, run `npm run build` again before `npm start`.
+
+## Deploy on Render
+
+The deployed app runs on Render's free plan at `https://<name>.onrender.com`, uses the Neon **main** branch, and asks for one password.
+`render.yaml` describes the service; Render reads it from the `main` branch on GitHub and deploys again after every push to `main`.
+
+Once:
+
+1. Choose a password of at least 16 characters (a password manager can make one). It's never stored in this repo.
+2. In Neon, pick the **main** branch, click **Connect** and copy its connection string.
+3. Sign in at https://render.com with GitHub, then **New** → **Blueprint**, and choose this repository.
+4. Render asks for `DATABASE_URL` (paste the main-branch string) and `APP_PASSWORD` (paste the password). Click **Apply**.
+5. When the deploy finishes, open the address Render shows. The browser asks you to sign in: type anything as the username, and your password.
+6. If main is empty, click **Import** and choose your latest Export. (The browser-data move doesn't apply here: the Render address has its own, empty browser storage.)
+
+Good to know:
+
+- The free plan sleeps after 15 minutes without visits. The next visit wakes it, which takes about a minute.
+- To change the password, edit `APP_PASSWORD` under the service's **Environment** tab in Render. It restarts with the new one.
+- On Render, the server only starts if `APP_PASSWORD` is set, because `HOST=0.0.0.0` opens it to the internet.
 
 ## First time: load your data
 
@@ -96,7 +121,7 @@ One JSON object. Ids link records together: an entry points to its track, topic 
 | Before (claude.ai) | Now (local) |
 | --- | --- |
 | Data in a claude.ai-hosted database | Data in your own Postgres database on Neon, plus Export/Import files |
-| Same data on phone and laptop | This computer only for now: the server runs here (deploying it comes later) |
+| Same data on phone and laptop | Same data anywhere, through the password-protected Render address |
 | Claude could log entries from a chat | Not available; you can ask Claude for a JSON snippet and import a merged file, or log by hand |
 | claude.ai sign-in decided who can edit | You are the only user |
 
@@ -116,6 +141,10 @@ All data access in the app goes through `src/db/db.ts`. It offers the same small
 | `PATCH /api/<collection>/<id>` | Change some fields of one record |
 | `DELETE /api/<collection>/<id>` | Delete one record |
 | `GET /api/health` | `{ ok, db }`: is the server up, and can it reach the database |
+| `GET /healthz` | `ok`, with no password and no database query: Render's health check |
 
-Without a login, the server protects your data by only listening on 127.0.0.1, only accepting writes sent as JSON
-(other websites can't send those to it), and rejecting requests addressed to any host other than localhost.
+Without user accounts, the server protects your data like this:
+- Locally, it only listens on 127.0.0.1.
+- On Render, every request needs `APP_PASSWORD` (HTTP Basic Auth).
+- It only accepts writes sent as JSON, which other websites can't send to it.
+- It rejects requests addressed to any host other than localhost or its Render address.

@@ -13,6 +13,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `package.json` has `"type": "module"`, so any new Node script must use `import`, not `require`.
 - The server needs `DATABASE_URL` (Neon Postgres) in `.env`; see `.env.example`. **Never commit `.env`**, because the repo is public. If you need a database for testing, run PGlite in the scratchpad (`@electric-sql/pglite-socket`, then `pglite-server --port=5499 --max-connections=5`) and set `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5499/postgres`. Don't point tests at the user's Neon data.
 
+## Deployment (Render)
+- `render.yaml` is a Render Blueprint: free web service in `singapore` (next to Neon's `ap-southeast-1`), `npm ci && npm run build`, then `npm start`. Render deploys from `main`, so **pushing `main` (`/ship`) deploys to production**.
+- Neon branches: **main** = live data, used only by Render (its `DATABASE_URL` lives in Render's dashboard). **dev** = the local `.env`. Never point local runs or tests at main.
+- `HOST` (default `127.0.0.1`) and `APP_PASSWORD` are set only on Render. If `HOST` isn't loopback, `server/index.ts` refuses to start unless `APP_PASSWORD` is at least 16 characters. When `APP_PASSWORD` is set, every request except `GET /healthz` needs HTTP Basic Auth (`checkBasicAuth` in `server/auth.ts`, any username). Without these variables, local runs behave as before: no password.
+- `/healthz` (Render's health check) answers before auth and never queries the database, so health checks don't wake Neon.
+- The API's Host allowlist (`allowedHosts` in `server/auth.ts`) is localhost, 127.0.0.1 and `RENDER_EXTERNAL_HOSTNAME`, which Render sets automatically. A custom domain (Phase 4) must be added there.
+- The client needs no auth code: browsers resend Basic Auth on same-origin `fetch`. The JSON content-type rule in `server/api.ts` is still the CSRF defence, because browsers also attach Basic Auth to cross-site requests.
+
 ## Data compatibility (don't break the user's saved data)
 - The data lives in Postgres on Neon. The browser reaches it only through the server's `/api` (`server/api.ts`), never directly.
 - localStorage key `learning-ledger` holds data from the earlier browser-only version. `db.load()` moves it into an empty database once and leaves it in place as a spare copy. `learning-ledger:lastExport` and the `ll.*` view prefs stay in localStorage. Never rename these keys.

@@ -1,13 +1,17 @@
 /* The /api routes. Each one maps to a method of the browser's data module (src/db/db.ts).
 
-   No login yet, so the server protects itself in other ways:
-   - It only listens on 127.0.0.1, so other computers can't reach it.
+   How the server protects your data:
+   - Locally it only listens on 127.0.0.1, so other computers can't reach it. On Render, APP_PASSWORD guards
+     every request before it gets here (see index.ts).
    - Writes must be sent as application/json. A web page on another site can't send that to us without
      a CORS "preflight" request first, and we never approve preflights, so other sites can't change your data.
-   - The Host header must be localhost or 127.0.0.1. That blocks "DNS rebinding", where a site points
-     its own domain name at your computer to get around the browser's same-origin rules. */
+     This still matters with a password: once you've signed in, your browser attaches it to requests that
+     other sites trigger too.
+   - The Host header must be localhost, 127.0.0.1 or Render's hostname. That blocks "DNS rebinding", where a site
+     points its own domain name at your computer to get around the browser's same-origin rules. */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { APP, SCHEMA, validate } from "../src/db/format.ts";
+import { allowedHosts } from "./auth.ts";
 import * as db from "./db.ts";
 import { isCollection } from "./rows.ts";
 
@@ -58,8 +62,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
   const url = new URL(req.url || "/", "http://localhost");
   if (!url.pathname.startsWith("/api/")) return false;
   try {
-    const host = (req.headers.host || "").replace(/:\d+$/, "");
-    if (host !== "localhost" && host !== "127.0.0.1") throw new HttpError(403, "Forbidden host.");
+    const host = (req.headers.host || "").replace(/:\d+$/, "").toLowerCase();
+    if (!allowedHosts(process.env).has(host)) throw new HttpError(403, "Forbidden host.");
     const { status, body } = await route(req, url);
     send(res, status, body);
   } catch (e) {

@@ -1,7 +1,13 @@
 // Learning Ledger server: serves the built app in dist/ and the /api routes, which save to Postgres (Neon).
 // Run:  npm run build  once (and after changing the code), then  npm start  and open http://localhost:8765
-// Needs DATABASE_URL in .env (see .env.example). Listens on 127.0.0.1 only, so nothing is exposed to the network.
-// Node 24 runs this TypeScript file directly: it strips the types, so there's no build step for the server.
+// Needs DATABASE_URL in .env (see .env.example). Node 24 runs this TypeScript file directly: it strips the types,
+// so there's no build step for the server.
+//
+// Locally it listens on 127.0.0.1 only, so nothing is exposed to the network, and there's no password.
+// On Render (render.yaml) it's reachable from the internet, so two environment variables switch that on together:
+//   HOST=0.0.0.0        listen on every network interface, not just this computer
+//   APP_PASSWORD=...    every request except /healthz needs this password (the browser shows a sign-in pop-up)
+// It refuses to start with a public HOST and no password, so a setup mistake can't expose your data.
 //
 // Options:  --port 8766   use another port
 //           --api-only    skip dist/ (for `npm run dev:api`, where Vite serves the app and forwards /api here)
@@ -10,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleApi } from "./api.ts";
+import { checkBasicAuth } from "./auth.ts";
 import { connect, health } from "./db.ts";
 
 const args = process.argv.slice(2);
@@ -45,6 +52,14 @@ if (!API_ONLY && !fs.existsSync(path.join(ROOT, "index.html"))) {
   console.error("The app hasn't been built yet. Run:  npm install  then  npm run build");
   process.exit(1);
 }
+// Read after loadEnvFile, so these could also come from .env (normally they're only set on Render).
+const HOST = process.env.HOST || "127.0.0.1";
+const PASSWORD = process.env.APP_PASSWORD || "";
+const PUBLIC = !["127.0.0.1", "localhost", "::1"].includes(HOST);
+if (PUBLIC && PASSWORD.length < 16) {
+  console.error(`HOST=${HOST} makes the app reachable from other computers, so APP_PASSWORD must be set to at least 16 characters.`);
+  process.exit(1);
+}
 connect(process.env.DATABASE_URL);
 
 function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -67,6 +82,17 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
 
 http
   .createServer(async (req, res) => {
+    // Render's health check: no password and no database query, so it can't wake Neon and use up its free hours.
+    if (req.url === "/healthz" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "text/plain", "Cache-Control": "no-store" });
+      return res.end("ok");
+    }
+    // The WWW-Authenticate header is what makes the browser show its sign-in pop-up. Once you've signed in,
+    // the browser sends the password with every request to this site, including the app's own fetch("/api/...").
+    if (PASSWORD && !checkBasicAuth(req.headers.authorization, PASSWORD)) {
+      res.writeHead(401, { "WWW-Authenticate": 'Basic realm="Learning Ledger", charset="UTF-8"', "Content-Type": "text/plain", "Cache-Control": "no-store" });
+      return res.end("This Learning Ledger is password-protected.");
+    }
     if (await handleApi(req, res)) return;
     if (API_ONLY) {
       res.writeHead(404, { "Content-Type": "text/plain" });
@@ -74,8 +100,11 @@ http
     }
     serveStatic(req, res);
   })
-  .listen(PORT, "127.0.0.1", async () => {
-    console.log(`Learning Ledger ${API_ONLY ? "API" : "is"} running at http://localhost:${PORT}`);
-    console.log("Keep this window open while you use it. Press Ctrl+C to stop.");
+  .listen(PORT, HOST, async () => {
+    if (PUBLIC) console.log(`Learning Ledger is listening on ${HOST}:${PORT}, password-protected.`);
+    else {
+      console.log(`Learning Ledger ${API_ONLY ? "API" : "is"} running at http://localhost:${PORT}${PASSWORD ? " (password-protected)" : ""}`);
+      console.log("Keep this window open while you use it. Press Ctrl+C to stop.");
+    }
     console.log((await health()) ? "Connected to the database." : "Can't reach the database yet. Check DATABASE_URL and your internet connection.");
   });

@@ -3,6 +3,9 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite",
     "dev:api": "node --watch server/index.ts --api-only --port 8766",
