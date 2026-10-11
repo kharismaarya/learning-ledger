@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useApp } from "../state/AppContext";
 
 export function Banner() {
-  const { banner, hideBanner, db } = useApp();
+  const { banner, hideBanner } = useApp();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (banner) ref.current?.scrollIntoView({ block: "nearest" });
@@ -19,13 +19,6 @@ export function Banner() {
             </button>
           )}
         </div>
-      </div>
-    );
-  if (db.memoryOnly)
-    return (
-      <div id="banner" className="banner">
-        This browser is blocking storage for this page, so changes will be lost when you close it. Use Export to keep them, or open the page
-        through the start script.
       </div>
     );
   return null;

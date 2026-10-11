@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LocalDB } from "./localDb";
+import { db } from "./db";
 import type { Entry, Milestone, Topic, Track } from "../types";
 
 export interface Ledger {
@@ -21,7 +21,7 @@ export function useLedger(): Ledger {
   });
   useEffect(() => {
     const sub = <K extends "tracks" | "topics" | "milestones" | "entries">(c: K) =>
-      LocalDB.collection(c).onSnapshot((rows) => setD((s) => ({ ...s, [c]: rows, loaded: { ...s.loaded, [c]: true } })));
+      db.collection(c).onSnapshot((rows) => setD((s) => ({ ...s, [c]: rows, loaded: { ...s.loaded, [c]: true } })));
     const offs = [sub("tracks"), sub("topics"), sub("milestones"), sub("entries")];
     return () => offs.forEach((off) => off());
   }, []);

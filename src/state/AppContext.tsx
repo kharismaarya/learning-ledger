@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { LocalDB, type DbError } from "../db/localDb";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { db, type DbError } from "../db/db";
 import { useLedger, type Ledger } from "../db/useLedger";
 import { store } from "../lib/localStore";
 import { today } from "../lib/dates";
@@ -79,9 +79,9 @@ function useAppState() {
         return true;
       } catch (e) {
         toast(
-          (e as DbError)?.code === "quota_exceeded"
-            ? "Browser storage is full. Export a backup, then delete old entries."
-            : "Couldn't save to this browser's storage.",
+          (e as DbError)?.code === "server_unavailable"
+            ? "Couldn't reach the server, so this wasn't saved. Is it still running?"
+            : "The server didn't accept this change: " + ((e as DbError)?.message || "unknown error"),
         );
         console.error(e);
         return false;
@@ -90,22 +90,53 @@ function useAppState() {
     [toast],
   );
 
+  /* fetch the data from the server once, when the app opens.
+     The answer can arrive after the app has closed (tests unmount it quickly), so results are dropped then. */
+  const mounted = useRef(false);
+  const load = useCallback(() => {
+    db.load().then(
+      ({ moved }) => {
+        if (!mounted.current) return;
+        setBanner(null);
+        if (moved) toast("Moved your browser data into the database");
+      },
+      () =>
+        mounted.current &&
+        setBanner({
+          msg: "Can't reach the database. Check that the server is running (npm start) and that you're online.",
+          buttons: (
+            <button className="btn primary" onClick={() => load()}>
+              Retry
+            </button>
+          ),
+        }),
+    );
+  }, [toast]);
+  useEffect(() => {
+    mounted.current = true;
+    load();
+    return () => {
+      mounted.current = false;
+      clearTimeout(toastTimer.current);
+    };
+  }, [load]);
+
   /* current track and its records */
   const sel = useMemo(() => selectors(data, ui), [data, ui]);
 
   async function setStatus(m: Milestone, ns: Status) {
     const was = m.status || "todo";
-    if (!(await write(() => LocalDB.doc("milestones", m.id).update({ status: ns, doneAt: ns === "done" ? today() : "" })))) return;
+    if (!(await write(() => db.doc("milestones", m.id).update({ status: ns, doneAt: ns === "done" ? today() : "" })))) return;
     if (ns === "done") {
       await write(() =>
-        LocalDB.collection("entries")
+        db.collection("entries")
           .doc("ms-" + m.id)
           .set({ trackId: m.trackId, type: "milestone", milestoneId: m.id, topicId: "", text: "Reached milestone: " + m.title, url: "", date: today(), createdAt: Date.now() }),
       );
       const others = sel.tMs.filter((x) => x.id !== m.id);
       if (!others.some((x) => x.status === "doing")) {
         const n = others.find((x) => (x.status || "todo") === "todo");
-        if (n && (await write(() => LocalDB.doc("milestones", n.id).update({ status: "doing" })))) {
+        if (n && (await write(() => db.doc("milestones", n.id).update({ status: "doing" })))) {
           focusNow.current = true;
           toast("Milestone reached. What's the first step for the next one?");
           return;
@@ -113,14 +144,14 @@ function useAppState() {
       }
       toast("Milestone reached and logged");
     } else if (was === "done") {
-      await write(() => LocalDB.doc("entries", "ms-" + m.id).delete());
+      await write(() => db.doc("entries", "ms-" + m.id).delete());
     }
   }
 
   async function createTopic(trackId: string, name: string): Promise<string | null> {
     const existing = sel.tTopics.find((t) => (t.name || "").toLowerCase() === name.toLowerCase());
     if (existing) return existing.id;
-    const ref = LocalDB.collection("topics").doc();
+    const ref = db.collection("topics").doc();
     return (await write(() => ref.set({ trackId, name, createdAt: Date.now() }))) ? ref.id : null;
   }
 
@@ -134,7 +165,7 @@ function useAppState() {
     ui,
     set,
     ...sel,
-    db: LocalDB,
+    db,
     write,
     toast,
     toastMsg,

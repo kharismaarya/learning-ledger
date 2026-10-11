@@ -224,7 +224,7 @@ export function AddEntryForm() {
         </div>
       </form>
       <div className="claude-tip">
-        Saved in this browser as you go. Use <code>Export</code> now and then to keep a backup file you can import anywhere.
+        Saved to the database as you go. Use <code>Export</code> now and then to keep a backup file of your own.
       </div>
     </section>
   );

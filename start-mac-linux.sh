@@ -10,4 +10,4 @@ if [ ! -f dist/index.html ]; then
   npm install && npm run build || exit 1
 fi
 ( sleep 1; (open "http://localhost:8765" 2>/dev/null || xdg-open "http://localhost:8765" 2>/dev/null) ) &
-node serve.js
+node server/index.ts

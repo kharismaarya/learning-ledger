@@ -1,4 +1,4 @@
-// Stop hook: type-check when src/ has uncommitted changes, and send any errors back to Claude.
+// Stop hook: type-check when src/ or server/ has uncommitted changes, and send any errors back to Claude.
 // Reads the hook payload on stdin. Prints {"decision":"block","reason":...} to make Claude keep going and fix them.
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -15,21 +15,30 @@ try {
   /* no payload: treat as a first stop */
 }
 
-const changed = spawnSync("git", ["status", "--porcelain", "--", "src"], { cwd: root, encoding: "utf8" });
+const changed = spawnSync("git", ["status", "--porcelain", "--", "src", "server"], { cwd: root, encoding: "utf8" });
 if (changed.status !== 0 || !changed.stdout.trim()) process.exit(0);
 
-const tsc = spawnSync(
-  process.execPath,
-  [path.join(root, "node_modules", "typescript", "bin", "tsc"), "--noEmit", "--incremental", "--tsBuildInfoFile", path.join(root, "node_modules", ".cache", "tsc.tsbuildinfo")],
-  { cwd: root, encoding: "utf8" },
-);
-if (tsc.error) process.exit(0); // typescript not installed yet (no npm install): nothing to check
-if (tsc.status === 0) process.exit(0);
+// the app and the server are separate TypeScript projects (different libs and module rules)
+const run = (project, cache) =>
+  spawnSync(
+    process.execPath,
+    [path.join(root, "node_modules", "typescript", "bin", "tsc"), "--noEmit", "-p", project, "--incremental", "--tsBuildInfoFile", path.join(root, "node_modules", ".cache", cache)],
+    { cwd: root, encoding: "utf8" },
+  );
+const results = [run("tsconfig.json", "tsc.tsbuildinfo"), run("server", "tsc-server.tsbuildinfo")];
+if (results.some((r) => r.error)) process.exit(0); // typescript not installed yet (no npm install): nothing to check
+if (results.every((r) => r.status === 0)) process.exit(0);
 
-const errors = (tsc.stdout + tsc.stderr).trim().split("\n").slice(0, 40).join("\n");
+const errors = results
+  .map((r) => r.stdout + r.stderr)
+  .join("\n")
+  .trim()
+  .split("\n")
+  .slice(0, 40)
+  .join("\n");
 if (payload.stop_hook_active) {
   // already continued once for this; don't loop, just surface it
-  console.log(JSON.stringify({ systemMessage: "TypeScript errors remain in src/:\n" + errors }));
+  console.log(JSON.stringify({ systemMessage: "TypeScript errors remain:\n" + errors }));
 } else {
-  console.log(JSON.stringify({ decision: "block", reason: "TypeScript errors in src/ (from `tsc --noEmit`). Fix them before finishing:\n" + errors }));
+  console.log(JSON.stringify({ decision: "block", reason: "TypeScript errors (from `tsc --noEmit`). Fix them before finishing:\n" + errors }));
 }

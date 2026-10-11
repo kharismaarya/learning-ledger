@@ -3,15 +3,18 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import backup from "../data/learning-ledger-2026-10-10.json";
 import { App } from "./App";
-import { KEY, LocalDB } from "./db/localDb";
+import { KEY, db } from "./db/db";
+import { norm } from "./db/format";
+import { fakeApi } from "./test/fakeApi";
 import type { Entry, Milestone } from "./types";
 
-const saved = () => JSON.parse(localStorage.getItem(KEY)!) as { entries: Entry[]; milestones: Milestone[]; topics: { name: string }[] };
+const saved = () => fakeApi.data as unknown as { entries: Entry[]; milestones: Milestone[]; topics: { name: string }[] };
 const byId = (id: string) => document.getElementById(id)!;
 const toast = (text: string | RegExp) => waitFor(() => expect(byId("toast")).toHaveTextContent(text));
 
+/** The server holds the backup; the app loads it like it would on a real start. */
 async function withBackup() {
-  LocalDB.replaceAll(backup);
+  fakeApi.data = norm(structuredClone(backup));
   const user = userEvent.setup();
   render(<App />);
   await screen.findByRole("heading", { name: /Build a web app with Claude Code/ });
@@ -47,9 +50,9 @@ describe("Learning Ledger app", () => {
   it("asks before an import replaces existing data", async () => {
     const user = await withBackup();
     await user.upload(byId("importFile") as HTMLInputElement, new File([JSON.stringify({ ...backup, entries: [] })], "small.json"));
-    expect(await screen.findByText(/Replace what's in this browser \(1 track, 15 entries\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/Replace what's in the database \(1 track, 15 entries\)/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(LocalDB.counts().entries).toBe(15);
+    expect(db.counts().entries).toBe(15);
   });
 
   it("rejects a file that isn't a Ledger backup", async () => {
@@ -59,7 +62,7 @@ describe("Learning Ledger app", () => {
     await user.click(screen.getByRole("button", { name: "OK" }));
     await user.upload(byId("importFile") as HTMLInputElement, new File([JSON.stringify({ app: "other" })], "other.json"));
     expect(await screen.findByText(/isn't a Learning Ledger file/)).toBeInTheDocument();
-    expect(LocalDB.counts().entries).toBe(15);
+    expect(db.counts().entries).toBe(15);
   });
 
   it("logs an entry only once a topic is picked, and saves it", async () => {
@@ -148,10 +151,10 @@ describe("Learning Ledger app", () => {
     const user = await withBackup();
     const article = screen.getByText("App Design Notes").closest("article") as HTMLElement;
     await user.click(within(article).getByRole("button", { name: "Delete" }));
-    expect(LocalDB.counts().entries).toBe(15);
+    expect(db.counts().entries).toBe(15);
     await user.click(within(article).getByRole("button", { name: "Confirm delete" }));
     await toast("Entry deleted");
-    expect(LocalDB.counts().entries).toBe(14);
+    expect(db.counts().entries).toBe(14);
   });
 
   it("answers an open question with Ctrl+Enter", async () => {
@@ -200,6 +203,49 @@ describe("Learning Ledger app", () => {
     expect(within(byId("filters")).getByRole("button", { name: /Topic: Planning & app idea/ })).toBeInTheDocument();
     // "By topic" makes no sense while one topic is selected
     expect(within(byId("viewSeg")).getByRole("button", { name: "By topic" })).toBeDisabled();
+  });
+
+  it("moves data saved by the browser-only version into an empty database, once", async () => {
+    localStorage.setItem(KEY, JSON.stringify(backup));
+    render(<App />);
+    await toast("Moved your browser data into the database");
+    expect(byId("logCount")).toHaveTextContent("15 entries");
+    expect(saved().entries).toHaveLength(15);
+    // the browser copy stays as a spare
+    expect(localStorage.getItem(KEY)).not.toBeNull();
+  });
+
+  it("doesn't move browser data when the database already has data", async () => {
+    fakeApi.data = norm({ ...backup, entries: backup.entries.slice(0, 2) });
+    localStorage.setItem(KEY, JSON.stringify(backup));
+    render(<App />);
+    await screen.findByRole("heading", { name: /Build a web app with Claude Code/ });
+    expect(fakeApi.calls).not.toContain("PUT /api/ledger");
+    expect(byId("logCount")).toHaveTextContent("2 entries");
+  });
+
+  it("says so when the server can't be reached, and loads on Retry", async () => {
+    fakeApi.data = norm(structuredClone(backup));
+    fakeApi.fail = "network";
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText(/Can't reach the database/)).toBeInTheDocument();
+    fakeApi.fail = null;
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.queryByText(/Can't reach the database/)).toBeNull());
+    expect(byId("logCount")).toHaveTextContent("15 entries");
+  });
+
+  it("a write the server can't save shows a toast and leaves the screen unchanged", async () => {
+    const user = await withBackup();
+    await user.selectOptions(byId("addTopic"), "planning");
+    await user.type(byId("addText"), "Not saved");
+    fakeApi.fail = 503;
+    await user.click(screen.getByRole("button", { name: "Add to log" }));
+    await toast(/Couldn't reach the server/);
+    expect(byId("logCount")).toHaveTextContent("15 entries");
+    // the draft is kept so it can be sent again
+    expect(byId("addText")).toHaveValue("Not saved");
   });
 
   it("groups the log by topic and by milestone", async () => {

@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent } from "react";
-import { BKEY } from "../db/localDb";
+import { BKEY, type DbError } from "../db/db";
 import { daysBetween, parseD, today } from "../lib/dates";
 import { store } from "../lib/localStore";
 import { plural } from "../lib/text";
@@ -53,14 +53,14 @@ export function TopBar() {
     }
     const cur = db.counts(),
       inc = { tracks: d.tracks.length, entries: d.entries.length };
-    const go = () => {
+    const go = async () => {
       try {
-        db.replaceAll(d);
+        await db.replaceAll(d);
         set({ cur: null, topicFilter: null, msFilter: null });
         app.hideBanner();
         app.toast(`Imported ${plural(inc.tracks, "track")} and ${plural(inc.entries, "entry", "entries")}`);
-      } catch {
-        app.showBanner({ msg: "Couldn't import: this browser's storage is full or blocked." });
+      } catch (e) {
+        app.showBanner({ msg: "Couldn't import: " + ((e as DbError)?.message || "the server couldn't be reached.") });
       }
     };
     if (!cur.tracks && !cur.entries) {
@@ -68,7 +68,7 @@ export function TopBar() {
       return;
     }
     app.showBanner({
-      msg: `Replace what's in this browser (${plural(cur.tracks, "track")}, ${plural(cur.entries, "entry", "entries")}) with "${f.name}" (${plural(inc.tracks, "track")}, ${plural(inc.entries, "entry", "entries")})? Export first if you want to keep the current data.`,
+      msg: `Replace what's in the database (${plural(cur.tracks, "track")}, ${plural(cur.entries, "entry", "entries")}) with "${f.name}" (${plural(inc.tracks, "track")}, ${plural(inc.entries, "entry", "entries")})? Export first if you want to keep the current data.`,
       buttons: (
         <>
           <button className="btn primary" onClick={go}>

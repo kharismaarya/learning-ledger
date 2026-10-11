@@ -12,4 +12,4 @@ if not exist "dist\index.html" (
   call npm run build || (pause & exit /b 1)
 )
 start "" http://localhost:8765
-node serve.js
+node server/index.ts

@@ -13,7 +13,12 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules,
   },
   {
-    files: ["serve.js", "vite.config.ts", ".claude/hooks/*.mjs"],
+    files: ["server/**/*.ts"],
+    extends: [js.configs.recommended, ...tseslint.configs.recommended],
+    languageOptions: { globals: globals.node },
+  },
+  {
+    files: ["vite.config.ts", ".claude/hooks/*.mjs"],
     extends: [js.configs.recommended],
     languageOptions: { globals: globals.node },
   },

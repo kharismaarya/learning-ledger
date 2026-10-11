@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "start": "node serve.js",
+    "dev:api": "node --watch server/index.ts --api-only --port 8766",
+    "build": "tsc --noEmit && tsc --noEmit -p server && vite build",
+    "start": "node server/index.ts",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "pg": "8.23.1",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
@@ -21,6 +23,8 @@
     "@testing-library/jest-dom": "6.10.0",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.7",
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "4.7.0",
