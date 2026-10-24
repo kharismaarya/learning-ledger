@@ -275,6 +275,18 @@ describe("the API", () => {
     expect(same.status).toBe(200);
   });
 
+  it("answers on our own domain only once PUBLIC_HOSTNAME names it", async () => {
+    const headers = { Host: "ledger.example.com" };
+    expect((await call("GET", "/api/auth/me", { headers })).status).toBe(403);
+    process.env.PUBLIC_HOSTNAME = "ledger.example.com";
+    try {
+      expect(await call("GET", "/api/auth/me", { headers })).toMatchObject({ status: 200, body: { email: null } });
+      expect((await call("GET", "/api/auth/me", { headers: { Host: "evil.example" } })).status).toBe(403);
+    } finally {
+      delete process.env.PUBLIC_HOSTNAME;
+    }
+  });
+
   it("limits failed sign-ins per email", async () => {
     await signUp("target@example.com");
     for (let i = 0; i < 10; i++) {

@@ -7,6 +7,7 @@
 // Locally it listens on 127.0.0.1 only, so nothing is exposed to the network.
 // On Render (render.yaml), HOST=0.0.0.0 makes it listen on every network interface, so it's reachable from the
 // internet. Render serves it over HTTPS, so a public HOST also makes the session cookie Secure (sent over HTTPS only).
+// PUBLIC_HOSTNAME (also in render.yaml) is our own domain: the API accepts it, and the onrender.com address redirects to it.
 //
 // Options:  --port 8766   use another port
 //           --api-only    skip dist/ (for `npm run dev:api`, where Vite serves the app and forwards /api here)
@@ -15,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleApi } from "./api.ts";
+import { canonicalRedirect } from "./auth.ts";
 import { connect, health } from "./db.ts";
 
 const args = process.argv.slice(2);
@@ -79,6 +81,12 @@ http
     if (req.url === "/healthz" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "text/plain", "Cache-Control": "no-store" });
       return res.end("ok");
+    }
+    // Old onrender.com links move to our own domain (PUBLIC_HOSTNAME), so there's only one address to sign in at.
+    const moved = canonicalRedirect(req.headers.host, req.method, req.url, process.env);
+    if (moved) {
+      res.writeHead(301, { Location: moved, "Cache-Control": "no-store" });
+      return res.end();
     }
     // The app's files (HTML, JS, CSS) go to anyone: they hold no data, and the sign-in form is one of them.
     // The /api routes that read or write records check the session themselves.

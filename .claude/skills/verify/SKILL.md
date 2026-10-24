@@ -51,6 +51,8 @@ If the server changed, also check the guard rails with `curl` (keep a cookie jar
 
 If `server/index.ts`, `server/auth.ts` or `render.yaml` changed, also restart once with `HOST=0.0.0.0` inline (still on PGlite) and check that sign-up's cookie is now `__Host-ll_session=…; …; Secure`. Browsers drop Secure cookies on plain http, so restart without `HOST` before the browser steps.
 
+If the host checks or the redirect changed, also restart once with `RENDER_EXTERNAL_HOSTNAME=learning-ledger.onrender.com PUBLIC_HOSTNAME=ledger.example.com` inline and check: `/api/auth/me` with `Host: ledger.example.com` → 200; with `Host: evil.example` → 403; `/` with `Host: learning-ledger.onrender.com` → 301 to `https://ledger.example.com/`; `/healthz` with that Host → 200 `ok`, not redirected.
+
 To watch a migration run, seed the PGlite database with the old schema first (see `OLD_SCHEMA` in `server/db.test.ts`), then start the server: it logs `Database: ran migration N.`
 
 The app always starts at the sign-in form, so step 4 begins by creating an account.

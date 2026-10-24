@@ -9,7 +9,7 @@
      a CORS "preflight" request first, and we never approve preflights, so other sites can't change your data.
      This matters because browsers attach cookies to requests that other sites trigger too (that attack is
      called CSRF). The session cookie's SameSite=Lax and the Origin check below are two more layers.
-   - The Host header must be localhost, 127.0.0.1 or Render's hostname. That blocks "DNS rebinding", where a site
+   - The Host header must be localhost, 127.0.0.1, Render's hostname or our own domain (PUBLIC_HOSTNAME). That blocks "DNS rebinding", where a site
      points its own domain name at your computer to get around the browser's same-origin rules.
    - Sign-in and sign-up are rate-limited, so passwords can't be guessed quickly. */
 import type { IncomingMessage, ServerResponse } from "node:http";

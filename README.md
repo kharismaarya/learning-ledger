@@ -80,6 +80,22 @@ Good to know:
 - Anyone who finds the address can create an account. They get an empty ledger of their own and can't see yours.
 - A sign-in lasts 30 days on that browser, or until you click **Sign out**.
 
+### Your own domain
+
+`PUBLIC_HOSTNAME` in `render.yaml` is the app's own address. The API only answers requests addressed to localhost,
+the onrender.com name or `PUBLIC_HOSTNAME`, and pages opened on the onrender.com name redirect there.
+Change `PUBLIC_HOSTNAME` and push **before** pointing DNS at Render, or every `/api` request answers 403 "Forbidden host."
+
+1. In Render, open the service → **Settings** → **Custom Domains** → **+ Add Custom Domain**, and enter the same hostname.
+2. At your DNS provider, add a **CNAME** from that name (e.g. `ledger`) to the service's `onrender.com` name.
+   For a bare domain (`example.com`), use an ALIAS/ANAME record or an **A** record to `216.24.57.1`; on Cloudflare, a CNAME `@`.
+   Delete any **AAAA** records and parking/forwarding records for the name. If the domain has CAA records, allow `letsencrypt.org` and `pki.goog`.
+   On Cloudflare, set **Proxy status** to **DNS only** (grey cloud).
+3. Back in Render, click **Verify**. Render then issues and renews the HTTPS certificate itself and redirects http to https.
+   A 502 right after verifying means routing is still updating: wait a few minutes.
+4. Open the new address and sign in again. Your records are in the database, but the sign-in cookie, the view settings and
+   the "last export" reminder belong to each address, so they start fresh there.
+
 ### Moving to accounts (once, when this version first deploys)
 
 Before accounts, the data had no owner. The first time this version starts, it moves the old tables into a Postgres
@@ -179,7 +195,7 @@ The record routes answer 401 unless you're signed in. How the server protects yo
   A wrong password and an unknown email get the same answer, in the same time.
 - **Other websites** can't make changes: writes must be JSON (which needs a CORS preflight that the server never approves),
   and a request whose `Origin` is another site is refused.
-- Locally, it only listens on 127.0.0.1, and it rejects requests addressed to any host other than localhost or its Render address.
+- Locally, it only listens on 127.0.0.1, and it rejects requests addressed to any host other than localhost, its Render address or its own domain (`PUBLIC_HOSTNAME`).
 
 Tests: `server/db.test.ts` runs the real SQL against PGlite (Postgres in WebAssembly) inside `npm test`, including
 the checks that one account can't read, change or delete another's records.

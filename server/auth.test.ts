@@ -3,6 +3,7 @@ import {
   DUMMY_HASH,
   RateLimiter,
   allowedHosts,
+  canonicalRedirect,
   clearCookie,
   clientIp,
   hashPassword,
@@ -142,5 +143,28 @@ describe("allowedHosts", () => {
     expect(hosts.has("learning-ledger.onrender.com")).toBe(true);
     expect(hosts.has("localhost")).toBe(true);
     expect(hosts.has("evil.example")).toBe(false);
+  });
+
+  it("adds our own domain when PUBLIC_HOSTNAME is set", () => {
+    const hosts = allowedHosts({ PUBLIC_HOSTNAME: "Ledger.Example.com" });
+    expect(hosts.has("ledger.example.com")).toBe(true);
+    expect(hosts.has("example.com")).toBe(false);
+  });
+});
+
+describe("canonicalRedirect", () => {
+  const env = { RENDER_EXTERNAL_HOSTNAME: "learning-ledger.onrender.com", PUBLIC_HOSTNAME: "ledger.example.com" };
+
+  it("sends GETs on the onrender.com name to our domain, keeping the path and query", () => {
+    expect(canonicalRedirect("Learning-Ledger.onrender.com", "GET", "/assets/a.js?v=1", env)).toBe("https://ledger.example.com/assets/a.js?v=1");
+    expect(canonicalRedirect("learning-ledger.onrender.com:443", "HEAD", "/", env)).toBe("https://ledger.example.com/");
+  });
+
+  it("leaves everything else alone", () => {
+    expect(canonicalRedirect("ledger.example.com", "GET", "/", env)).toBeNull(); // already there
+    expect(canonicalRedirect("localhost", "GET", "/", env)).toBeNull();
+    expect(canonicalRedirect("learning-ledger.onrender.com", "POST", "/api/auth/signin", env)).toBeNull(); // would lose the body
+    expect(canonicalRedirect("learning-ledger.onrender.com", "GET", "/", { RENDER_EXTERNAL_HOSTNAME: env.RENDER_EXTERNAL_HOSTNAME })).toBeNull();
+    expect(canonicalRedirect("localhost", "GET", "/", {})).toBeNull();
   });
 });

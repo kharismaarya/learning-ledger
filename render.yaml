@@ -16,6 +16,10 @@ services:
       # HTTPS-only (server/index.ts). Everyone signs in with their own account.
       - key: HOST
         value: 0.0.0.0
+      # our own domain: the API accepts requests for it, and the onrender.com address redirects to it.
+      # It must also be added under Settings → Custom Domains in Render, and as a CNAME in Cloudflare (README.md).
+      - key: PUBLIC_HOSTNAME
+        value: ledger.elbusta.com
       # sync: false means Render asks for the value in its dashboard. Secrets never go in this file: the repo is public.
       - key: DATABASE_URL # the Neon "main" branch connection string
         sync: false

@@ -144,9 +144,22 @@ export function clientIp(headers: Record<string, string | string[] | undefined>,
 
 /* ---------- hosts ---------- */
 
-/** Hostnames the API accepts in the Host header. Render sets RENDER_EXTERNAL_HOSTNAME (e.g. learning-ledger.onrender.com). */
+/** Hostnames the API accepts in the Host header. Render sets RENDER_EXTERNAL_HOSTNAME (e.g. learning-ledger.onrender.com);
+    PUBLIC_HOSTNAME is our own domain, set in render.yaml. */
 export function allowedHosts(env: Record<string, string | undefined>): Set<string> {
   const hosts = new Set(["localhost", "127.0.0.1"]);
   if (env.RENDER_EXTERNAL_HOSTNAME) hosts.add(env.RENDER_EXTERNAL_HOSTNAME.toLowerCase());
+  if (env.PUBLIC_HOSTNAME) hosts.add(env.PUBLIC_HOSTNAME.toLowerCase());
   return hosts;
+}
+
+/** Where to send a request that arrived on the onrender.com name, once we have our own domain. Cookies and
+    localStorage belong to one hostname, so serving the app on both would mean two sign-ins and two sets of view
+    prefs. Only GET and HEAD are redirected: browsers turn a redirected POST into a GET and lose its body. */
+export function canonicalRedirect(host: string | undefined, method: string | undefined, url: string | undefined, env: Record<string, string | undefined>): string | null {
+  const target = env.PUBLIC_HOSTNAME?.toLowerCase();
+  const render = env.RENDER_EXTERNAL_HOSTNAME?.toLowerCase();
+  if (!target || !render || (method !== "GET" && method !== "HEAD")) return null;
+  if ((host || "").replace(/:\d+$/, "").toLowerCase() !== render) return null;
+  return `https://${target}${url || "/"}`;
 }
